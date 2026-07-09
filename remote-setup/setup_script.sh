@@ -37,7 +37,9 @@ sudo -u examkiosk code --install-extension vscjava.vscode-java-pack
 sudo -u examkiosk code --install-extension ms-python.python
 sudo -u examkiosk code --install-extension ms-vscode.cpptools
 
-echo ">>> [5/8] Writing VS Code settings..."
+echo ">>> [5/8] Writing VS Code settings and keybindings..."
+
+# 1. Write settings.json (Added UI lockdown settings and fixed missing comma)
 cat << 'EOF' > /tmp/vscode-settings.json
 {
     "update.mode": "none",
@@ -48,10 +50,49 @@ cat << 'EOF' > /tmp/vscode-settings.json
     "files.autoSave": "afterDelay",
     "files.autoSaveDelay": 1000,
     "window.titleBarStyle": "native",
-    "workbench.activityBar.location": "hidden"
+    "workbench.activityBar.location": "hidden",
+    "window.menuBarVisibility": "none",
+    "window.commandCenter": false,
+    "workbench.layoutControl.enabled": false,
+    "security.workspace.trust.enabled": false,
+    "chat.disableAIFeatures": true,
+    "github.copilot.enable": {
+        "*": false
+    },
+    "github.copilot.editor.enableCodeActions": false,
+    "github.copilot.nextEditSuggestions.enabled": false,
+    "editor.inlineSuggestions.edits.allowCodeShifting": "never",
+    "terminal.integrated.defaultProfile.linux": "RestrictedBash",
+    "terminal.integrated.automationProfile.linux": {
+        "path": "/bin/bash",
+        "args": ["--restricted", "--rcfile", "/home/examkiosk/.restricted_bashrc"]
+    },
+    "terminal.integrated.profiles.linux": {
+        "RestrictedBash": {
+            "path": "/bin/bash",
+            "args": ["--restricted", "--rcfile", "/home/examkiosk/.restricted_bashrc"]
+        },
+        "bash": null,
+        "sh": null,
+        "tmux": null,
+        "zsh": null
+    }
 }
 EOF
 sudo mv /tmp/vscode-settings.json /home/examkiosk/.config/Code/User/settings.json
+
+# 2. Write keybindings.json to disable folder/workspace commands
+cat << 'EOF' > /tmp/vscode-keybindings.json
+[
+    { "key": "ctrl+k ctrl+o", "command": "-workbench.action.files.openFolder" },
+    { "key": "ctrl+o", "command": "-workbench.action.files.openFileFolder" },
+    { "key": "ctrl+o", "command": "-workbench.action.files.openFile" },
+    { "key": "ctrl+shift+p", "command": "-workbench.action.showCommands" },
+    { "key": "f1", "command": "-workbench.action.showCommands" }
+]
+EOF
+sudo mv /tmp/vscode-keybindings.json /home/examkiosk/.config/Code/User/keybindings.json
+
 
 echo ">>> [6/8] Writing exam session launch script..."
 TMP_SCRIPT="/tmp/exam-session.sh"
@@ -96,7 +137,43 @@ EOF
 sudo mv "$TMP_DESKTOP" "$DEST_DESKTOP"
 
 sudo mkdir -p /home/examkiosk/.config/openbox
-sudo mv rc.xml /home/examkiosk/.config/openbox/
+sudo cp rc.xml /home/examkiosk/.config/openbox/
+
+
+echo ">>> [7.5/8] Setting up restricted terminal..."
+
+# 1. Create the whitelist directory for commands
+sudo mkdir -p /home/examkiosk/restricted_bin
+
+# 2. Symlink ONLY the allowed commands
+# You can add or remove commands from this array as needed
+ALLOWED_COMMANDS=("ls" "clear" "java" "javac" "python3" "gcc" "g++")
+
+for cmd in "${ALLOWED_COMMANDS[@]}"; do
+    CMD_PATH=$(which $cmd 2>/dev/null)
+    if [ -n "$CMD_PATH" ]; then
+        sudo ln -s "$CMD_PATH" "/home/examkiosk/restricted_bin/$cmd"
+    fi
+done
+
+# 3. Create the restricted bashrc initialization file
+cat << 'EOF' > /tmp/.restricted_bashrc
+# Set a clean, standard terminal prompt
+export PS1='examkiosk@kiosk:\W\$ '
+
+# Restrict the PATH to ONLY our cherry-picked directory
+export PATH="/home/examkiosk/restricted_bin"
+readonly PATH
+EOF
+
+sudo mv /tmp/.restricted_bashrc /home/examkiosk/.restricted_bashrc
+sudo chown root:root /home/examkiosk/.restricted_bashrc
+sudo chmod 644 /home/examkiosk/.restricted_bashrc
+sudo chown -R root:root /home/examkiosk/restricted_bin
+
+# OS level lockdown
+# Force the operating system to default this user to restricted bash
+sudo usermod -s /bin/rbash examkiosk
 
 echo ">>> [8/8] Locking down permissions..."
 # Run VS Code once (headless) to ensure extension file structure is initialised
@@ -105,8 +182,16 @@ sudo -u examkiosk code --list-extensions
 # Lock down config files - read-only for examkiosk, owned by root
 sudo chown root:root /home/examkiosk/.config/Code/User/settings.json
 sudo chmod 644 /home/examkiosk/.config/Code/User/settings.json
+
+sudo chown root:root /home/examkiosk/.config/Code/User/keybindings.json
+sudo chmod 644 /home/examkiosk/.config/Code/User/keybindings.json
+
 sudo chown -R root:root /home/examkiosk/.vscode/extensions
 sudo chmod 755 /home/examkiosk/.vscode/extensions
+
+# FIX: Ensure examkiosk owns its extensions so Java can unpack its server and write logs
+# sudo chown -R examkiosk:examkiosk /home/examkiosk/.vscode
+# sudo chmod -R 755 /home/examkiosk/.vscode
 
 # Disabled for testing stage. Enable before final setup
 # echo ">>> [Extra] Deleting all other desktop environments"
