@@ -24,6 +24,10 @@ sudo mkdir -p /home/examkiosk/exam_workspace
 sudo chown examkiosk:examkiosk /home/examkiosk/exam_workspace
 sudo chmod 700 /home/examkiosk/exam_workspace
 
+echo ">>> [3.1/8] Creating new user group jmx and adding user examkiosk to the jmx group"
+sudo groupadd --system jmx
+sudo usermod -aG jmx examkiosk
+
 echo ">>> [4/8] Setting up VS Code config directories and installing extensions..."
 sudo mkdir -p /home/examkiosk/.config/Code/User
 sudo mkdir -p /home/examkiosk/.vscode
@@ -112,6 +116,8 @@ firejail --net=none \
   --whitelist=/home/examkiosk/.vscode/extensions \
   --whitelist=/home/examkiosk/.config/Code \
   --whitelist=/home/examkiosk/.bashrc \
+  --whitelist=/run/jmx \
+  --ignore=nogroups \
   code --kiosk --wait /home/examkiosk/exam_workspace
 
 # When VS Code is closed, kill Openbox and log out
