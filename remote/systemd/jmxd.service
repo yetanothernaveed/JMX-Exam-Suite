@@ -21,6 +21,7 @@ RuntimeDirectoryMode=0750
 # unprivileged service account plus AmbientCapabilities= instead of
 # full root -- smaller blast radius if a future command has a bug.
 User=root
+Group=jmx
 
 # Baseline hardening; tighten further as real commands are added
 # (e.g. add SystemCallFilter=, restrict ReadWritePaths= to exactly
