@@ -59,6 +59,7 @@ inline bool writeFull(int fd, const void* buf, size_t len) {
     return true;
 }
 
+// Sends a single message to the peer. Returns false on I/O error or if the payload is too large.
 inline bool sendMessage(int fd, const std::string& payload) {
     if (payload.size() > kMaxMessageSize) return false;
     uint32_t len = htonl(static_cast<uint32_t>(payload.size()));

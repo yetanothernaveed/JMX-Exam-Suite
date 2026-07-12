@@ -7,8 +7,8 @@ scopes = [
     "https://www.googleapis.com/auth/drive"
 ]
 
-# Authenticate
-creds = Credentials.from_service_account_file("/home/naveed/Projects/CSE221/testbench/service_account.json", scopes=scopes)
+# ToDo: Update this using Pathlib api
+creds = Credentials.from_service_account_file("/home/naveed/Projects/CSE221/gdrive/service_account.json", scopes=scopes)
 CLIENT = gspread.authorize(creds)
 
 if __name__ == "__main__":

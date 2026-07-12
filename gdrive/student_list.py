@@ -60,4 +60,4 @@ if __name__ == "__main__":
     for id, full_name in StudentDataSingleton._id_to_name.items():
         last_name = full_name.split(" ")[-1]
         first_name = full_name.split(" ")[:-1]
-        print(f"{last_name}, {' '.join(first_name)}")
+        print(f"{last_name}, {' '.join(first_name)} | Student ID: {id}")

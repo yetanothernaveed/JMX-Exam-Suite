@@ -70,6 +70,6 @@ int main(int argc, char** argv) {
 
     close(fd);
     std::cout << response << std::endl;
-    // return response.rfind("ERROR", 0) == 0 ? 1 : 0; // For C++ < 20
+    
     return response.starts_with("ERROR") ? 1 : 0; // For C++ 20
 }
