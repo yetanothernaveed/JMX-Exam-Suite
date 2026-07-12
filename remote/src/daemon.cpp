@@ -16,6 +16,7 @@
 //    control boundary. Keep them as tight as your use case allows.
 
 #include "common.hpp"
+#include "commands.hpp"
 
 #include <csignal>
 #include <cstdio>
@@ -56,7 +57,9 @@ void logPeerCredentials(int clientFd) {
 // shell fragments.
 std::string handleCommand(const std::string& command) {
     if (command == "hello") {
-        return "Hi!";
+        return jmx_commands::handleHello();
+    } else if (command == "start") {
+        return jmx_commands::handleStart();
     }
     return "ERROR: unknown command";
 }
