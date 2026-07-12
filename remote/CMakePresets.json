@@ -1,0 +1,28 @@
+{
+    "version": 6,
+    "configurePresets": [
+    {
+        "name": "default",
+        "binaryDir": "${sourceDir}/build",
+        "cacheVariables": {
+            "CMAKE_INSTALL_PREFIX": "${sourceDir}/dist"
+        }
+    }
+    ],
+    "buildPresets": [
+    {
+        "name": "default",
+        "configurePreset": "default",
+        "targets": ["install"]
+    }
+    ],
+    "workflowPresets": [
+    {
+        "name": "ci-install",
+        "steps": [
+        { "type": "configure", "name": "default" },
+        { "type": "build", "name": "default" }
+        ]
+    }
+    ]
+}
