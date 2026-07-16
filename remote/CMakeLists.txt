@@ -5,10 +5,10 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_compile_options(-Wall -Wextra -O2)
 
-add_executable(jmxd src/daemon.cpp)
+add_executable(jmxd src/jmxd.cpp)
 target_include_directories(jmxd PRIVATE src)
 
-add_executable(jmx src/client.cpp)
+add_executable(jmx src/jmx.cpp)
 target_include_directories(jmx PRIVATE src)
 
 install(TARGETS jmxd jmx RUNTIME DESTINATION bin)
