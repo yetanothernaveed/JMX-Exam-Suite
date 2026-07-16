@@ -5,6 +5,7 @@ JMX is a comprehensive suite of tools designed to facilitate the creation, manag
 JMX features a command line interface that allows exam takers to retrieve questions, submit answers and view their results seamlessly from within a highly secure sandbox environment. The suite also includes a server component that manages the exam flow, ensuring that all interactions are logged and processed efficiently.
 
 JMX has four main components, arranged in three directories:
+
     - **Remote PC Setup**: Uses Lubuntu/Firejail/Openbox and a number of other configurations to launch a secure environment for the exam takers.
     - **JMX CLI**: A highly constraint CLI tool that allows exam takers to retrieve questions, submit answers and view their results seamlessly from within a highly secure sandbox environment.
     - **JMX Daemon (jmxd)**: A system daemon that runs on the remote PCs, and manages the interactions between the exam takers and the server as the exam takers are trapped inside a sandbox that prevent any and all external communications. JMX creates and listens on an ephemeral unix socket (/run/jmx/jmx.sock). It ensures that all interactions are logged and processed.
