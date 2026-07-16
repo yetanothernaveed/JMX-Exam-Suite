@@ -8,7 +8,7 @@ scopes = [
 ]
 
 # ToDo: Update this using Pathlib api
-creds = Credentials.from_service_account_file("/home/naveed/Projects/CSE221/gdrive/service_account.json", scopes=scopes)
+creds = Credentials.from_service_account_file("service_account.json", scopes=scopes)
 CLIENT = gspread.authorize(creds)
 
 if __name__ == "__main__":

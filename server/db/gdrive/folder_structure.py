@@ -1,5 +1,5 @@
 import os
-from student_list import StudentDataSingleton
+from db.gdrive.student_list import StudentDataSingleton
 
 COURSE_CODE = input("Enter the course code: ").upper() # GLOBAL
 SECTION_NUM = int(input("Enter the section number: ")) # GLOBAL 
@@ -19,7 +19,7 @@ else:
 
 new_count = 0
 existing_count = 0
-for student_id in StudentDataSingleton.get_all_student_ids(section_num=SECTION_NUM):
+for student_id in StudentDataSingleton.get_all_student_ids(section=SECTION_NUM):
     student_dir = os.path.join(ROOT_DIR, f"{student_id}")
     
     if not os.path.exists(student_dir):
