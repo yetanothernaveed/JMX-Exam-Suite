@@ -1,0 +1,40 @@
+#include "common.hpp"
+
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <string>
+#include <iostream>
+
+
+namespace server {
+    const char* IP = "127.0.0.1";
+    const int PORT = 8080;
+
+    int connectToServer() {
+        int sock = socket(AF_INET, SOCK_STREAM, 0);
+        if (sock < 0) {
+            std::cerr << "Socket creation error" << std::endl;
+            return -1;
+        }
+
+        sockaddr_in server_address {};
+        server_address.sin_family = AF_INET;
+        server_address.sin_port = htons(PORT);
+
+        if (inet_pton(AF_INET, IP, &server_address.sin_addr) <= 0) {
+            std::cerr << "Invalid address/ Address not supported" << std::endl;
+            close(sock);
+            return -1;
+        }
+        
+        if (connect(sock, (struct sockaddr*)&server_address, sizeof(server_address)) < 0) {
+            std::cerr << "Connection Failed" << std::endl;
+            close(sock);
+            return -1;
+        }
+        
+        return sock;
+    }
+
+}
