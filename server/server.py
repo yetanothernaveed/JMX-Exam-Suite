@@ -1,6 +1,3 @@
-from startFlow import args, folderStructure
-from db import connect, createAndPopulate
-
 import socket
 import struct
 import json
@@ -40,7 +37,8 @@ def send_msg(conn, message_str):
 
 def start_server(host='0.0.0.0', port=8080):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    # Allow immediate reuse of the port after stopping the server
+    
+    # To Allow immediate reuse of the port after stopping the server
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     
     server_socket.bind((host, port))
@@ -95,18 +93,20 @@ def start_server(host='0.0.0.0', port=8080):
         server_socket.close()
 
 if __name__ == "__main__":
-    # user_args = args.take_args()
-    # folderStructure.validate(user_args["questions_folder"], user_args["responses_folder"])
+    from startFlow import args, folderStructure
+    from db.createAndPopulate import populate_database
+    from db.connect import connect_to_mysql_server
     
-    # database_name = f"{user_args['course_name']}_"
-    # database_name += f"{user_args['semester']}{user_args['year']}_"
-    # database_name += f"section{user_args['section']}_"
-    # database_name += f"{user_args['quiz number']}"
+    user_args = args.take_args()
+    folderStructure.validate(user_args["questions_folder"], user_args["responses_folder"])
     
-    # '''cse221_summer2026_section1_quiz0'''
-    # db_conn = connect.connect_to_mysql_server()
-    # createAndPopulate.populate_database(db_conn, section=user_args["section_num"], database_name=database_name)
+    database_name = f"{user_args['course_name']}_"
+    database_name += f"{user_args['semester']}{user_args['year']}_"
+    database_name += f"section{user_args['section']}_"
+    database_name += f"{user_args['quiz number']}"
+    
+    db_conn = connect_to_mysql_server()
+    populate_database(db_conn, section=user_args["section_num"], database_name=database_name)
 
-    db_conn = connect.connect_to_mysql_server()
-    createAndPopulate.populate_database(db_conn, section=1, database_name="cse221_summer2026_section1_quiz0")
+    
     start_server()
