@@ -1,3 +1,6 @@
+from startFlow import args, folderStructure
+from db import connect, createAndPopulate
+
 import socket
 import struct
 import json
@@ -92,4 +95,18 @@ def start_server(host='0.0.0.0', port=8080):
         server_socket.close()
 
 if __name__ == "__main__":
+    # user_args = args.take_args()
+    # folderStructure.validate(user_args["questions_folder"], user_args["responses_folder"])
+    
+    # database_name = f"{user_args['course_name']}_"
+    # database_name += f"{user_args['semester']}{user_args['year']}_"
+    # database_name += f"section{user_args['section']}_"
+    # database_name += f"{user_args['quiz number']}"
+    
+    # '''cse221_summer2026_section1_quiz0'''
+    # db_conn = connect.connect_to_mysql_server()
+    # createAndPopulate.populate_database(db_conn, section=user_args["section_num"], database_name=database_name)
+
+    db_conn = connect.connect_to_mysql_server()
+    createAndPopulate.populate_database(db_conn, section=1, database_name="cse221_summer2026_section1_quiz0")
     start_server()
