@@ -24,3 +24,4 @@ dist/
 *.egg
 *.egg-info/
 *.egg-info/
+service_account.json
