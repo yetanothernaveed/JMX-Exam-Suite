@@ -113,6 +113,11 @@ for `src/client.cpp` → `jmx`.)
    jmx hello
    # Hi!
    ```
+## To build using CMake presets
+    ```
+    cmake --workflow --preset ci-install
+    ```
+
 
 ## Running the CLI from inside firejail
 
