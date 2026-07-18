@@ -11,7 +11,7 @@ namespace server {
     const char* IP = "127.0.0.1";
     const int PORT = 8080;
 
-    int connectToServer() {
+    inline int connectToServer() {
         int sock = socket(AF_INET, SOCK_STREAM, 0);
         if (sock < 0) {
             std::cerr << "Socket creation error" << std::endl;

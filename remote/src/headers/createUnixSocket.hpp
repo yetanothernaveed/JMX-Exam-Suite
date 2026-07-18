@@ -12,7 +12,7 @@
 #include <cstring>         // strerror(), strncpy()
 
 namespace jmx_unix_socket {
-    int createListenSocket(const char* path) {
+    inline int createListenSocket(const char* path) {
         unlink(path); // clean start every boot/restart
 
         int fd = socket(AF_UNIX, SOCK_STREAM, 0);
