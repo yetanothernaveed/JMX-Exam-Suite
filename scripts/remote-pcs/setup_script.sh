@@ -203,4 +203,9 @@ sudo chmod 755 /home/examkiosk/.vscode/extensions
 # echo ">>> [Extra] Deleting all other desktop environments"
 # sudo find /usr/share/xsessions/ -name "*.desktop" ! -name "exam.desktop" -delete
 
+echo ">>> [7.9/8] Setting up JMX daemon config files"
+
+sudo mkdir -p /etc/jmxd
+ 
+
 echo ">>> Exam kiosk setup complete."
