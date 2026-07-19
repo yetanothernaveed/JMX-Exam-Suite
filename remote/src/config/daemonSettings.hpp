@@ -9,6 +9,7 @@ struct DaemonSettings {
     std::string workspace_directory = "/home/examkiosk/exam_workspace";
     std::string server_address = "172.16.0.26";
     std::string server_port = "8080";
+    std::string session_duration_in_hours = "2";
 
 
     void load_from_system(const std::string& path) {
@@ -19,12 +20,14 @@ struct DaemonSettings {
             workspace_directory = wrapper.get("workspace_directory", workspace_directory);
             server_address = wrapper.get("server_address", server_address);
             server_port = wrapper.get("server_port", server_port);
+            session_duration_in_hours = wrapper.get("session_duration_in_hours", session_duration_in_hours);
         } else {
             // File didn't exist, create it with our defaults
             wrapper.set("socket_directory", socket_directory);
             wrapper.set("workspace_directory", workspace_directory);
             wrapper.set("server_address", server_address);
             wrapper.set("server_port", server_port);
+            wrapper.set("session_duration_in_hours", session_duration_in_hours);
             wrapper.save(path);
         }
     }
