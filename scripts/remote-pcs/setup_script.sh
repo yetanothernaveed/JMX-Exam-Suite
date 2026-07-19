@@ -205,7 +205,7 @@ sudo chmod 755 /home/examkiosk/.vscode/extensions
 
 echo ">>> [7.9/8] Setting up JMX daemon config files"
 
-sudo mkdir -p /etc/jmxd
- 
+sudo mkdir -p /etc/jmxd 
+
 
 echo ">>> Exam kiosk setup complete."

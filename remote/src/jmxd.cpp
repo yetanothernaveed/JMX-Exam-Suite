@@ -20,6 +20,7 @@
 #include "./headers/createUnixSocket.hpp"
 #include "./headers/credentials.hpp"
 #include "./lib/json.hpp"
+#include "./config/daemonSettings.hpp"
 
 #include <csignal>
 #include <cstring>
@@ -57,6 +58,9 @@ std::string handleCommand(int& serverFd, const nlohmann::json& request) {
 int main() {
     openlog("jmxd", LOG_PID | LOG_CONS, LOG_DAEMON);
     syslog(LOG_INFO, "starting, listening on %s", jmx::kSocketPath);
+
+    DaemonSettings settings;
+    settings.load_from_system("/etc/jmxd/jmxd.conf");
 
     struct sigaction sa{};
     sa.sa_handler = onSignal;
