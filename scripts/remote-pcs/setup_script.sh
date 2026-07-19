@@ -3,7 +3,7 @@ set -e
 
 echo ">>> [1/8] Installing system dependencies..."
 sudo apt update
-sudo apt install -y build-essential python3 openjdk-21-jdk openbox firejail
+sudo apt install -y build-essential python3 openjdk-21-jdk openbox firejail sqlite3 libsqlite3-dev
 
 echo ">>> [2/8] Installing VS Code..."
 sudo apt-get install -y wget gpg
