@@ -9,6 +9,7 @@
 // Commands
 #include "./commands/HelloCommand.hpp"
 #include "./commands/StartCommand.hpp"
+#include "./commands/EndCommand.hpp"
 
 #include <cstring>
 #include <iostream>
@@ -48,6 +49,7 @@ int main(int argc, char** argv) {
     std::vector<std::unique_ptr<Command>> commands;
     commands.push_back(std::make_unique<HelloCommand>());
     commands.push_back(std::make_unique<StartCommand>());
+    commands.push_back(std::make_unique<EndCommand>());
 
     for (auto& cmd : commands) {
         cmd->setup(app);
