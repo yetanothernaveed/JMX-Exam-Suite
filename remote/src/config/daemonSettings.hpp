@@ -1,12 +1,12 @@
 #pragma once
 
-#include "configManagar.hpp"
+#include "configManager.hpp"
 #include "../headers/common.hpp"
 #include <string>
 
 struct DaemonSettings {
-    std::string socket_directory = jmx::kSocketPath;
-    std::string workspace_directory = "/home/examkiosk/exam_workspace";
+    std::string socket_directory = "/run/jmx";
+    std::string workspace_directory = "/home/naveed/exam_workspace"; // Update this for production
     std::string server_address = "172.16.0.26";
     std::string server_port = "8080";
     std::string session_duration_in_hours = "2";
