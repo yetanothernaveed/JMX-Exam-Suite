@@ -23,8 +23,7 @@ public:
         return {
             {"action", "start"},
             {"payload", {
-                {"student_id", student_id},
-                {"server_ip", server_ip}
+                {"student_id", student_id}
             }}
         };
     }
