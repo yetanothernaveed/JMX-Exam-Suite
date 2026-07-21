@@ -13,6 +13,10 @@ namespace command_handler {
 
     inline std::string handleStart(const nlohmann::json& payload) {
         int serverFd = server::connectToServer();
+
+        if (serverFd < 0) {
+            return "ERROR: Failed to connect to server";
+        }
         
         std::string payloadStr = payload.dump();
         
@@ -59,11 +63,15 @@ namespace command_handler {
     }
 
     inline std::string handleEnd() {
-        int serverFd = server::connectToServer();
-
         SessionManager sessionManager;
         if (!sessionManager.check_session_exists()) {
             return "ERROR: No active session to end";
+        }
+        
+        int serverFd = server::connectToServer();
+
+        if (serverFd < 0) {
+            return "ERROR: Failed to connect to server";
         }
 
         // Add student Id and exam Id to payload
