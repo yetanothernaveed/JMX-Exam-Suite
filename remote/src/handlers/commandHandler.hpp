@@ -66,8 +66,6 @@ namespace command_handler {
             return "ERROR: No active session to end";
         }
 
-        std::cout << "Ending session for student ID: " << sessionManager.get_student_id() << std::endl;
-
         // Add student Id and exam Id to payload
         nlohmann::json message = {
             {"action", "end"},
