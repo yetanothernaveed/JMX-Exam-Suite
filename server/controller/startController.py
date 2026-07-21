@@ -1,7 +1,7 @@
 import db.connectToDB
 from db.createAndPopulate import DatabaseError
 
-def start_controller(payload):
+def start_controller(payload, user_args=None):
     student_id = payload.get("student_id")
 
     if db.connectToDB.DB_CONN_POOL:
@@ -13,16 +13,20 @@ def start_controller(payload):
         if found and type(found) is tuple and len(found) >= 2:
             print(f"Student {student_id} found in the database.")
             return {
-                "status": "success", 
+                "status": "SUCCESS", 
                 "message": f"Student {student_id} found.", 
                 "payload": {
                     "student_id": found[0],
-                    "name": found[1]
+                    "student_name": found[1],
+                    "exam_id": user_args.get("exam_id") if user_args else None
                 }
             }
         else:
             print(f"Student {student_id} not found in the database.")
-            return {"status": "error", "message": f"Student {student_id} not found."}
+            return {
+                "status": "ERROR", 
+                "message": f"Student with id {student_id} was not found in student list."
+            }
     else:
         raise DatabaseError("Database connection is not established. Please connect to the database first.")
 
