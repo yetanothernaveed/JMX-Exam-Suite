@@ -21,6 +21,7 @@
 #include "./headers/credentials.hpp"
 #include "./lib/json.hpp"
 #include "./config/daemonSettings.hpp"
+#include "./session/sessionManager.hpp"
 
 #include <csignal>
 #include <cstring>
@@ -28,6 +29,10 @@
 #include <sys/socket.h>
 #include <syslog.h>
 #include <unistd.h>
+#include <thread>
+#include <condition_variable>
+#include <mutex>
+#include <atomic>
 
 namespace {
 
@@ -38,19 +43,42 @@ void onSignal(int) { g_stop = 1; }
 // explicit if/else (or switch) allowlist -- never dispatch based on
 // arbitrary client-supplied strings interpreted as code, paths, or
 // shell fragments.
-std::string handleCommand(int& serverFd, const nlohmann::json& request) {
+std::string handleCommands(const nlohmann::json& request) {
     std::string command = request.value("action", "");
     
     if (command == "hello") {
         return command_handler::handleHello();
     } else if (command == "start") {
-        return command_handler::handleStart(
-            serverFd, 
-            request
-        );
+        return command_handler::handleStart(request);
+    } else if (command == "end") {
+        return command_handler::handleEnd();
     }
     
     return "ERROR: Unknown command";
+}
+
+// Thread control mechanisms
+std::condition_variable cleanup_cv;
+std::mutex cleanup_cv_mtx;
+std::atomic<bool> stop_cleanup_thread(false);
+
+void session_cleanup_worker(SessionManager& manager, std::chrono::minutes check_interval) {
+    while (!stop_cleanup_thread) {
+        std::unique_lock<std::mutex> lock(cleanup_cv_mtx);
+        
+        if (cleanup_cv.wait_for(lock, check_interval, [] { return stop_cleanup_thread.load(); })) {
+            break; 
+        }
+
+        std::string error {};
+        if (manager.check_and_cleanup(error)) {
+            syslog(LOG_INFO, "[Session Cleanup] Expired session tracking data successfully wiped.");
+        } else if (!error.empty()) {
+            syslog(LOG_ERR, "[Session Cleanup Error] %s", error.c_str());
+        }
+
+        
+    }
 }
 
 }
@@ -82,10 +110,11 @@ int main() {
         return 1;
     }
 
+    // Cleanup thread
+    SessionManager session_manager;
+    std::chrono::minutes run_interval(5);
+    std::thread cleanup_thread(session_cleanup_worker, std::ref(session_manager), run_interval);
 
-    // Connects to the server
-    // Will be initialized only if requested.
-    int serverFd {};
 
     // Single-threaded accept loop: simple and sufficient for a small
     // command set. If you need to handle slow/concurrent clients
@@ -106,7 +135,7 @@ int main() {
         std::string payload;
         if (jmx::recvMessage(clientFd, payload)) {
             nlohmann::json request = nlohmann::json::parse(payload, nullptr, false);
-            std::string response = handleCommand(serverFd, request);
+            std::string response = handleCommands(request);
             jmx::sendMessage(clientFd, response);
         } else {
             syslog(LOG_WARNING, "malformed or oversized request, dropping connection");
@@ -117,6 +146,11 @@ int main() {
     syslog(LOG_INFO, "shutting down");
     close(listenFd);
     unlink(jmx::kSocketPath);
+    stop_cleanup_thread = true;
+    cleanup_cv.notify_all();
+    if (cleanup_thread.joinable()) {
+        cleanup_thread.join();
+    }
     closelog();
     return 0;
 }
