@@ -3,7 +3,7 @@ import socket
 from router import router
 from salp import send, receive
 
-def start_server(host='0.0.0.0', port=8080):
+def start_server(host='0.0.0.0', port=8080, user_args=None):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) # Free port
     server_socket.bind((host, port))
@@ -17,16 +17,16 @@ def start_server(host='0.0.0.0', port=8080):
             
             try:
                 message_json = receive.receive_json(conn)
-                print(f"Received Message: {message_json}\n")
+                print(f"\nReceived Message: {message_json}\n")
 
-                server_response = router(message_json)
+                server_response = router(message_json, user_args)
                 send.send_json(conn, server_response)
                 
             except Exception as e:
                 print(f"Error handling data: {e}")
             finally:
                 conn.close()
-                print(f"Connection with {addr} closed.")
+                print(f"Connection with {addr} closed.\n")
                 
     except KeyboardInterrupt:
         print("\nShutting down server.")
@@ -45,5 +45,20 @@ if __name__ == "__main__":
     # database_name += f"section{user_args['section']}_"
     # database_name += f"{user_args['quiz number']}"
     
-    DB_CONN_POOL = connect_to_mysql_database(section=1, database_name="testdb")
-    start_server()
+    # for testing only
+    user_args = {
+        "course": "cse221",
+        "semester": "summer",
+        "year": "2026",
+        "section": "1",
+        "quiz_number": "0",
+        "slot": "SUN_11",
+        "questions_folder": "~/Work/CSE221/questions",
+        "responses_folder": "~/Work/CSE221/responses",
+        "total_time": "60"
+    }
+    user_args["exam_id"] = f"{user_args['course']}_{user_args['semester']}{user_args['year']}_section{user_args['section']}_quiz{user_args['quiz_number']}"
+
+
+    DB_CONN_POOL = connect_to_mysql_database(section=1, database_name=user_args["exam_id"])
+    start_server(user_args = user_args)
