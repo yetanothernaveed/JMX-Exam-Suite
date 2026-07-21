@@ -75,6 +75,7 @@ def take_args():
     return {
         "course": course,
         "semester": semester,
+        "section": section,
         "year": year,
         "quiz_number": quiz_number,
         "slot": slot,
