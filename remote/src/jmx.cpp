@@ -44,7 +44,7 @@ int connectToDaemon(const char* path) {
 
 int main(int argc, char** argv) {
     CLI::App app{"jmx - Seamless onsite coding exams"};
-    // app.require_subcommand(1);
+    app.require_subcommand(1);
 
     std::vector<std::unique_ptr<Command>> commands;
     commands.push_back(std::make_unique<HelloCommand>());
