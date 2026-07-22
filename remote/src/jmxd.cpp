@@ -135,6 +135,11 @@ int main() {
         std::string payload;
         if (jmx::recvMessage(clientFd, payload)) {
             nlohmann::json request = nlohmann::json::parse(payload, nullptr, false);
+            if (request.is_discarded()) {
+                syslog(LOG_WARNING, "malformed JSON request, dropping connection");
+                close(clientFd);
+                continue;
+            }
             std::string response = handleCommands(request);
             jmx::sendMessage(clientFd, response);
         } else {
