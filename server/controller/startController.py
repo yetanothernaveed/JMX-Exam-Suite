@@ -23,12 +23,10 @@ def start_controller(payload, user_args=None):
             questions_payload = {}
             for qid, path, extension in questions:
                 with open(path, 'r') as file:
-                    if extension == ".md":
-                        questions_payload[qid]["md"] = file.read()
-                    elif extension == ".java":
-                        questions_payload[qid]["java"] = file.read()
-                    elif extension == ".py":
-                        questions_payload[qid]["py"] = file.read()
+                    questions_payload[qid] = {
+                        "content": file.read(),
+                        "extension": extension
+                    }
 
 
             return {
