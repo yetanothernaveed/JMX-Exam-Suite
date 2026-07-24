@@ -12,13 +12,16 @@ def validate(questions_folder, responses_folder):
     if not os.path.exists(questions_folder):
         # raise error
         raise FileNotFoundError(f"Questions folder does not exist: {questions_folder}")
-        
-    questions = [
-        f for f in os.listdir(questions_folder) 
-        if os.path.isfile(os.path.join(questions_folder, f)) and f.lower().endswith(('.md', '.markdown'))
-    ]
 
-    if not questions:
+    number_of_questions_files_found = 0 
+    for root, dirs, _ in os.walk(questions_folder):
+            for dir in dirs:
+                dir_path = os.path.join(root, dir)
+                for file in os.listdir(dir_path):
+                    if file.endswith(".md") or file.endswith(".java") or file.endswith(".py"):
+                        number_of_questions_files_found += 1
+
+    if number_of_questions_files_found == 0:
         raise FileNotFoundError(f"No markdown question files found in the questions folder: {questions_folder}")
 
     # Create responses folder if it doesn't exist
