@@ -61,7 +61,7 @@ namespace command_handler {
         }
 
         std::string response_msg = 
-            "\n\n🟢🟢🟢🟢🟢🟢 SUCCESS 🟢🟢🟢🟢🟢🟢🟢\n\n"
+            "\n\n🟢🟢🟢🟢🟢🟢 SUCCESS 🟢🟢🟢🟢🟢🟢🟢\n"
             "Initiated session for student with the following details:\n"
             "Student ID: " + responseJson["payload"]["student_id"].get<std::string>() + "\n"
             "Student Name: " + responseJson["payload"]["student_name"].get<std::string>() + "\n"
@@ -79,43 +79,53 @@ namespace command_handler {
         
         int serverFd = server::connectToServer();
 
-        if (serverFd < 0) {
-            return "ERROR: Failed to connect to server";
-        }
+        if (serverFd >= 0) {
+            // Add student Id and exam Id to payload
+            nlohmann::json message = {
+                {"action", "end"},
+                {"payload", {
+                    {"student_id", sessionManager.get_student_id()},
+                    {"exam_id", sessionManager.get_exam_id()}
+                }}
+            };
+            
+            jmx::sendMessage(serverFd, message.dump());
+            std::string response {};
+            nlohmann::json responseJson;
 
-        // Add student Id and exam Id to payload
-        nlohmann::json message = {
-            {"action", "end"},
-            {"payload", {
-                {"student_id", sessionManager.get_student_id()},
-                {"exam_id", sessionManager.get_exam_id()}
-            }}
-        };
-        
-        jmx::sendMessage(serverFd, message.dump());
-        std::string response {};
-        nlohmann::json responseJson;
+            if (!jmx::recvMessage(serverFd, response)) {
+                return "ERROR: failed to receive response from server"; 
+            } else {
+                responseJson = nlohmann::json::parse(response);
 
-        if (!jmx::recvMessage(serverFd, response)) {
-            return "ERROR: failed to receive response from server"; 
-        } else {
-            responseJson = nlohmann::json::parse(response);
-
-            if (responseJson["status"] == "ERROR") {
-                return std::string("ERROR: ") + responseJson["message"].get<std::string>();
+                if (responseJson["status"] == "ERROR") {
+                    return std::string("ERROR: ") + responseJson["message"].get<std::string>();
+                }
             }
-        }
 
+        } 
+        
         std::string error;
         if (!sessionManager.delete_session(error)) {
             return error;
         }
-
+        
+        std::string response_msg {};
+        if (serverFd < 0) {
+            response_msg = 
+            "\n\n🟢🟢🟢🟢🟢🟢 SUCCESS 🟢🟢🟢🟢🟢🟢🟢\n"
+            "Could not connect to server, but local session ended successfully.\n"
+            "This may happen if the server is down or if the exam has already ended.\n"
+            "If you submitted your answers, they should still be retained on the server.\n"
+            "This is not an error message. Thank your using JMX.\n";
+        } else {
+            response_msg = 
+            "\n\n🟢🟢🟢🟢🟢🟢 SUCCESS 🟢🟢🟢🟢🟢🟢🟢\n"
+            "Ended session successfully. Thank your for using JMX.\n\n";
+        }
+        
+        
         serverFd = {}; // Reset the server file descriptor
-
-        std::string response_msg = 
-            "\n\n🟢🟢🟢🟢🟢🟢 SUCCESS 🟢🟢🟢🟢🟢🟢🟢\n\n"
-            "Ended session successfully.\n\n";
 
         return response_msg;
     }
