@@ -34,7 +34,7 @@ def start_server(host='0.0.0.0', port=8080, user_args=None):
         server_socket.close()
 
 if __name__ == "__main__":
-    from startFlow import args, folderStructure
+    from user_args import args, folderStructure
     from db.connectToDB import connect_to_mysql_database
     
     # user_args = args.take_args()
@@ -53,7 +53,7 @@ if __name__ == "__main__":
         "section": "1",
         "quiz_number": "0",
         "slot": "SUN_11",
-        "questions_folder": "~/Work/CSE221/questions",
+        "questions_folder": "/home/naveed/Work/CSE221/questions",
         "responses_folder": "~/Work/CSE221/responses",
         "total_time": "60"
     }
