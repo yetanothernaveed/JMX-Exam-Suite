@@ -47,9 +47,18 @@ namespace command_handler {
             return error;
         }
 
-        // ToDo
-        // Clear exam_workspace directory
-        // Write to question files
+        exam_workspace_handler::clear_directory();
+        
+        // For each question in responseJson["payload"]["questions"], write to a file in the exam_workspace directory
+        for (const auto& question : responseJson["payload"]["questions"]) {
+            std::string question_filename = question["qid"].get<std::string>() + question["extension"].get<std::string>();
+
+            exam_workspace_handler::write_file_to_directory(
+                std::filesystem::path(DaemonSettings().workspace_directory + "/" + question["qid"].get<std::string>()),
+                question_filename,
+                question["content"].get<std::string>()
+            );
+        }
 
         std::string response_msg = 
             "\n\n🟢🟢🟢🟢🟢🟢 SUCCESS 🟢🟢🟢🟢🟢🟢🟢\n\n"
