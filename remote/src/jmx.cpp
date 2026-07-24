@@ -10,6 +10,7 @@
 #include "./commands/HelloCommand.hpp"
 #include "./commands/StartCommand.hpp"
 #include "./commands/EndCommand.hpp"
+#include "./commands/GetCommand.hpp"
 
 #include <cstring>
 #include <iostream>
@@ -50,6 +51,7 @@ int main(int argc, char** argv) {
     commands.push_back(std::make_unique<HelloCommand>());
     commands.push_back(std::make_unique<StartCommand>());
     commands.push_back(std::make_unique<EndCommand>());
+    commands.push_back(std::make_unique<GetCommand>());
 
     for (auto& cmd : commands) {
         cmd->setup(app);

@@ -52,6 +52,10 @@ std::string handleCommands(const nlohmann::json& request) {
         return command_handler::handleStart(request);
     } else if (command == "end") {
         return command_handler::handleEnd();
+    } else if (command == "get_questions") {
+        return command_handler::handleGetQuestions();
+    } else if (command == "get_stats") {
+        return command_handler::handleGetStats();
     }
     
     return "ERROR: Unknown command";

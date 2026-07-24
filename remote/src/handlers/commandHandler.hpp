@@ -129,4 +129,87 @@ namespace command_handler {
 
         return response_msg;
     }
+
+    inline std::string handleGetQuestions() {
+        SessionManager sessionManager;
+        if (!sessionManager.check_session_exists()) {
+            return "ERROR: No active session to fetch questions";
+        }
+
+        int serverFd = server::connectToServer();
+
+        if (serverFd < 0) {
+            return "ERROR: Failed to connect to server";
+        }
+
+        nlohmann::json message = {
+            {"action", "get_questions"}
+        };
+
+        jmx::sendMessage(serverFd, message.dump());
+        std::string response {};
+        nlohmann::json responseJson;
+
+        if (!jmx::recvMessage(serverFd, response)) {
+            return "ERROR: failed to receive response from server"; 
+        } else {
+            responseJson = nlohmann::json::parse(response);
+
+            if (responseJson["status"] == "ERROR") {
+                return std::string("ERROR: ") + responseJson["message"].get<std::string>();
+            }
+        }
+
+        // Write questions to exam_workspace
+        for (const auto& question : responseJson["payload"]["questions"]) {
+            std::string question_filename = question["qid"].get<std::string>() + question["extension"].get<std::string>();
+
+            exam_workspace_handler::write_file_to_directory(
+                std::filesystem::path(DaemonSettings().workspace_directory + "/" + question["qid"].get<std::string>()),
+                question_filename,
+                question["content"].get<std::string>()
+            );
+        }
+
+        return "Successfully fetched questions and saved to exam workspace.";
+    }
+
+    inline std::string handleGetStats() {
+        SessionManager sessionManager;
+        if (!sessionManager.check_session_exists()) {
+            return "ERROR: No active session to fetch stats";
+        }
+
+        int serverFd = server::connectToServer();
+
+        if (serverFd < 0) {
+            return "ERROR: Failed to connect to server";
+        }
+
+        nlohmann::json message = {
+            {"action", "get_stats"}
+        };
+
+        jmx::sendMessage(serverFd, message.dump());
+        std::string response {};
+        nlohmann::json responseJson;
+
+        if (!jmx::recvMessage(serverFd, response)) {
+            return "ERROR: failed to receive response from server"; 
+        } else {
+            responseJson = nlohmann::json::parse(response);
+
+            if (responseJson["status"] == "ERROR") {
+                return std::string("ERROR: ") + responseJson["message"].get<std::string>();
+            }
+        }
+
+        // Format the stats nicely
+        std::string stats_str = "Exam Statistics:\n";
+        // for (const auto& stat : responseJson["payload"]["stats"]) {
+        //     stats_str += stat["name"].get<std::string>() + ": " + std::to_string(stat["value"].get<int>()) + "\n";
+        // }
+
+        return stats_str;
+    }
 }
