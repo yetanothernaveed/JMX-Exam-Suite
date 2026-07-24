@@ -1,5 +1,6 @@
 import db.connectToDB
 from db.createAndPopulate import DatabaseError
+from controller.getQuestionsController import get_questions_controller
 
 import os
 
@@ -17,18 +18,7 @@ def start_controller(payload, user_args=None):
 
         if found and type(found) is tuple and len(found) >= 2:
             print(f"Student {student_id} found in the database.")
-            questions = get_questions(user_args.get("questions_folder") if user_args else None)
-
-            # Read the files and add them to the payload labeled with their file names
-            questions_payload = {}
-            for qid, path, extension in questions:
-                with open(path, 'r') as file:
-                    questions_payload[qid] = {
-                        "content": file.read(),
-                        "extension": extension
-                    }
-
-
+            
             return {
                 "status": "SUCCESS", 
                 "message": f"Student {student_id} found.", 
@@ -36,11 +26,12 @@ def start_controller(payload, user_args=None):
                     "student_id": found[0],
                     "student_name": found[1],
                     "exam_id": user_args.get("exam_id") if user_args else None,
-                    "questions": questions_payload
+                    "questions": get_questions_controller(payload, user_args)["payload"]["questions"]
                 }
             }
         else:
             print(f"Student {student_id} not found in the database.")
+            
             return {
                 "status": "ERROR", 
                 "message": f"Student with id {student_id} was not found in student list."
@@ -50,8 +41,6 @@ def start_controller(payload, user_args=None):
 
 
 def get_questions(questions_folder):
-    print("Getting Questions from the questions folder...")
-
     # For each folder in questions folder, look for files with extensions .md, .java and .py
     # Don't look at the questions folder itself, only look at the subfolders
     questions = []
@@ -65,5 +54,5 @@ def get_questions(questions_folder):
                         "path": os.path.join(dir_path, file),
                         "extension": os.path.splitext(file)[1]
                     })
-                    
+           
     return questions
