@@ -1,4 +1,4 @@
-def validate(questions_folder, responses_folder):
+def validate(questions_folder, responses_folder, exam_id):
     """
     Creates the folder structure for questions and responses if they don't exist.
     
@@ -28,4 +28,10 @@ def validate(questions_folder, responses_folder):
     if not os.path.exists(responses_folder):
         os.makedirs(responses_folder)
         print(f"Responses folder did not exist so it was created: {responses_folder}")
+
+    # Create exam folder inside responses folder if it doesn't exist
+    exam_folder = os.path.join(responses_folder, exam_id)
+    if not os.path.exists(exam_folder):
+        os.makedirs(exam_folder)
+        print(f"Exam folder did not exist so it was created: {exam_folder}")
     
