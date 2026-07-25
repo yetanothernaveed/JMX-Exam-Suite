@@ -37,8 +37,8 @@ def populate_database(connection, section, database_name):
 
         cursor.execute(f"CREATE TABLE IF NOT EXISTS students (id VARCHAR(15) PRIMARY KEY, name TEXT)")
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS submission (
-                id VARCHAR(100) PRIMARY KEY,
+            CREATE TABLE IF NOT EXISTS submissions (
+                id CHAR(100) PRIMARY KEY DEFAULT (UUID()),
                 student_id VARCHAR(15),
                 pc_id TEXT,
                 question_id TEXT,

@@ -5,7 +5,7 @@ from router import router
 from salp import send, receive
 from user_args import folderStructure
 
-def start_server(host='0.0.0.0', port=8080, user_args=None):
+def start_server(host='0.0.0.0', port=8080, user_args=None, DB_CONN_POOL=None):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) # Free port
     server_socket.bind((host, port))
@@ -21,7 +21,7 @@ def start_server(host='0.0.0.0', port=8080, user_args=None):
                 message_json = receive.receive_json(conn)
                 print(f"\nReceived Message: {message_json}\n")
 
-                server_response = router(message_json, user_args)
+                server_response = router(message_json, user_args, DB_CONN_POOL)
                 send.send_json(conn, server_response)
                 
             except Exception as e:
@@ -55,12 +55,17 @@ if __name__ == "__main__":
         "section": "1",
         "quiz_number": "0",
         "slot": "SUN_11",
-        "questions_folder": Path.home() / "Work/CSE221/questions",
-        "responses_folder": Path.home() / "Work/CSE221/responses",
+        "questions_folder_root": Path.home() / "Work/CSE221/questions",
+        "responses_folder_root": Path.home() / "Work/CSE221/responses",
         "total_time": "60"
     }
     user_args["exam_id"] = f"{user_args['course']}_{user_args['semester']}{user_args['year']}_section{user_args['section']}_quiz{user_args['quiz_number']}"
 
-    folderStructure.validate(user_args["questions_folder"], user_args["responses_folder"], user_args["exam_id"])
+    user_args["questions_folder"], user_args["responses_folder"] = folderStructure.validate(
+        user_args["questions_folder_root"], 
+        user_args["responses_folder_root"], 
+        user_args["exam_id"]
+    )
+    
     DB_CONN_POOL = connect_to_mysql_database(section=1, database_name=user_args["exam_id"])
-    start_server(user_args = user_args)
+    start_server(user_args = user_args, DB_CONN_POOL=DB_CONN_POOL)

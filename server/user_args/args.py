@@ -48,8 +48,8 @@ def take_args():
         slot = input("Enter the correct slot ID (e.g., 'SPECIAL', 'MON_8', 'TUE_11', etc.): ")
         print()
 
-    questions_folder = f"~/questions/{course}/{semester}{year}/section{section}/quiz{quiz_number}/"
-    print(f"Question folder path: {questions_folder}")
+    questions_folder_root = f"~/questions"
+    print(f"Question folder root path: {questions_folder_root}")
     
     question_folder_confirm = input(f"Confirm the question folder path is correct: (y/n): ")
     print()
@@ -57,8 +57,8 @@ def take_args():
         questions_folder = input("Enter the correct absolute path: ")
         print()
 
-    reponses_folder = f"~/responses/{course}/{semester}{year}/section{section}/quiz{quiz_number}"
-    print(f"Quiz responses folder path: {reponses_folder}")
+    reponses_folder_root = f"~/responses/"
+    print(f"Quiz responses folder root path: {reponses_folder_root}")
 
     quiz_reponses_folder_confirm = input(f"Confirm the quiz responses folder path is correct: (y/n): ")
     print()
@@ -79,7 +79,7 @@ def take_args():
         "year": year,
         "quiz_number": quiz_number,
         "slot": slot,
-        "questions_folder": questions_folder,
-        "responses_folder": reponses_folder,
+        "questions_folder_root": questions_folder_root,
+        "responses_folder_root": reponses_folder_root,
         "total_time": total_time
     }

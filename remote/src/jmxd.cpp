@@ -36,54 +36,50 @@
 
 namespace {
 
-volatile sig_atomic_t g_stop = 0;
-void onSignal(int) { g_stop = 1; }
+    volatile sig_atomic_t g_stop = 0;
+    void onSignal(int) { g_stop = 1; }
 
-// The one command the daemon currently understands. Keep this as an
-// explicit if/else (or switch) allowlist -- never dispatch based on
-// arbitrary client-supplied strings interpreted as code, paths, or
-// shell fragments.
-std::string handleCommands(const nlohmann::json& request) {
-    std::string command = request.value("action", "");
-    
-    if (command == "hello") {
-        return command_handler::handleHello();
-    } else if (command == "start") {
-        return command_handler::handleStart(request);
-    } else if (command == "end") {
-        return command_handler::handleEnd();
-    } else if (command == "get_questions") {
-        return command_handler::handleGetQuestions();
-    } else if (command == "get_stats") {
-        return command_handler::handleGetStats();
-    }
-    
-    return "ERROR: Unknown command";
-}
-
-// Thread control mechanisms
-std::condition_variable cleanup_cv;
-std::mutex cleanup_cv_mtx;
-std::atomic<bool> stop_cleanup_thread(false);
-
-void session_cleanup_worker(SessionManager& manager, std::chrono::minutes check_interval) {
-    while (!stop_cleanup_thread) {
-        std::unique_lock<std::mutex> lock(cleanup_cv_mtx);
+    std::string handleCommands(const nlohmann::json& request) {
+        std::string command = request.value("action", "");
         
-        if (cleanup_cv.wait_for(lock, check_interval, [] { return stop_cleanup_thread.load(); })) {
-            break; 
+        if (command == "hello") {
+            return command_handler::handleHello();
+        } else if (command == "start") {
+            return command_handler::handleStart(request);
+        } else if (command == "end") {
+            return command_handler::handleEnd();
+        } else if (command == "get_questions") {
+            return command_handler::handleGetQuestions();
+        } else if (command == "get_stats") {
+            return command_handler::handleGetStats();
         }
-
-        std::string error {};
-        if (manager.check_and_cleanup(error)) {
-            syslog(LOG_INFO, "[Session Cleanup] Expired session tracking data successfully wiped.");
-        } else if (!error.empty()) {
-            syslog(LOG_ERR, "[Session Cleanup Error] %s", error.c_str());
-        }
-
         
+        return "ERROR: Unknown command";
     }
-}
+
+    // Thread control mechanisms
+    std::condition_variable cleanup_cv;
+    std::mutex cleanup_cv_mtx;
+    std::atomic<bool> stop_cleanup_thread(false);
+
+    void session_cleanup_worker(SessionManager& manager, std::chrono::minutes check_interval) {
+        while (!stop_cleanup_thread) {
+            std::unique_lock<std::mutex> lock(cleanup_cv_mtx);
+            
+            if (cleanup_cv.wait_for(lock, check_interval, [] { return stop_cleanup_thread.load(); })) {
+                break; 
+            }
+
+            std::string error {};
+            if (manager.check_and_cleanup(error)) {
+                syslog(LOG_INFO, "[Session Cleanup] Expired session tracking data successfully wiped.");
+            } else if (!error.empty()) {
+                syslog(LOG_ERR, "[Session Cleanup Error] %s", error.c_str());
+            }
+
+            
+        }
+    }
 
 }
 
