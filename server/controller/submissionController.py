@@ -55,6 +55,7 @@ def update_results(payload, score, DB_CONN_POOL):
     """
     student_id = payload.get("student_id")
     qid = payload.get("qid")
+    pc_id = payload.get("pc_id")
     conn = None
     cursor = None
 
@@ -64,7 +65,7 @@ def update_results(payload, score, DB_CONN_POOL):
 
         cursor.execute(
             "INSERT INTO submissions (student_id, pc_id, question_id, score) VALUES (%s, %s, %s, %s)",
-            (student_id, socket.gethostname(), qid, score)
+            (student_id, pc_id, qid, score)
         )
 
     except Error as e:
@@ -185,6 +186,7 @@ if __name__ == "__main__":
     payload = {
         "student_id": "CSYR",
         "qid": "Q101",
+        "pc_id": "pc1",
         "code": code
     }
 
