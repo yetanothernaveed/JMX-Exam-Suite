@@ -11,6 +11,7 @@
 #include "./commands/StartCommand.hpp"
 #include "./commands/EndCommand.hpp"
 #include "./commands/GetCommand.hpp"
+#include "./commands/SubmitCommand.hpp"
 
 #include <cstring>
 #include <iostream>
@@ -52,6 +53,7 @@ int main(int argc, char** argv) {
     commands.push_back(std::make_unique<StartCommand>());
     commands.push_back(std::make_unique<EndCommand>());
     commands.push_back(std::make_unique<GetCommand>());
+    commands.push_back(std::make_unique<SubmitCommand>());
 
     for (auto& cmd : commands) {
         cmd->setup(app);
