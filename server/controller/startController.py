@@ -19,7 +19,7 @@ def start_controller(payload, user_args=None):
         if found and type(found) is tuple and len(found) >= 2:
             print(f"Student {student_id} found in the database.")
 
-            student_folder_path = os.path.join(user_args["responses_folder"], user_args["exam_id"], student_id)
+            student_folder_path = os.path.join(user_args["responses_folder"], user_args["exam_id"], student_id, "best")
             if not os.path.exists(student_folder_path):
                 os.makedirs(student_folder_path)
                 print(f"Student folder did not exist so it was created: {student_folder_path}")
