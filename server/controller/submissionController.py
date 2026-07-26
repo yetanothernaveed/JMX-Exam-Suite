@@ -6,7 +6,18 @@ import socket
 import os
 from datetime import datetime
 
-def  get_judgement(payload, user_args):
+LANGUAGE_MULTIPLIERS = {
+    "c++": {"cpu": 1.0, "wall": 2.0, "memory": 1.0, "memory_pad": 0},
+    "java": {"cpu": 2.0, "wall": 3.0, "memory": 1.5, "memory_pad": 32},
+    "python": {"cpu": 3.0, "wall": 4.0, "memory": 1.2, "memory_pad": 128}
+}
+
+def  get_judgement(
+        payload, user_args,
+        base_cpu_timeout,
+        base_wall_timeout,
+        base_memory_limit
+    ):
     """
     Submits the code to the PistonJudge API for execution and returns the result.
     Args:
@@ -22,23 +33,41 @@ def  get_judgement(payload, user_args):
     """
     qid = payload.get("qid")
     questions_folder = user_args.get("questions_folder")
+    language = None
+
+    file_extension = payload.get("filename").split(".")[-1].lower()  # Get the file extension in lowercase
+
+    if file_extension == "java":
+        language = "java"
+    elif file_extension == "py":
+        language = "python"
+    elif file_extension == "cpp":
+        language = "c++"
+    else:
+        return {
+            "status": "ERROR",
+            "message": "Unsupported file type. Only .java, .py, and .cpp files are currently supported."
+        }
+
+    cpu_timeout = int(base_cpu_timeout * LANGUAGE_MULTIPLIERS[language]["cpu"])
+    wall_timeout = int(base_wall_timeout * LANGUAGE_MULTIPLIERS[language]["wall"])
+    memory_limit = int(base_memory_limit * LANGUAGE_MULTIPLIERS[language]["memory"]) + LANGUAGE_MULTIPLIERS[language]["memory_pad"]
 
     try:
         judge_output = pistonjudge.judge.judge_submission(
             payload["code"],
-            f"{questions_folder}/{qid}/wrapper/Main.java",
+            f"{questions_folder}/{qid}/wrapper/Main.{file_extension}",
             f"{questions_folder}/{qid}/testcases/tc.in",
             f"{questions_folder}/{qid}/testcases/tc.out",
-            3000,
-            128 * 10**6
+            wall_timeout,
+            cpu_timeout,
+            memory_limit,
+            language
         )
 
     except Exception as e:
         print(f"Error during code submission: {e}")
-        return {
-            "status": "ERROR",
-            "message": f"An error occurred while submitting the code:\n {str(e)}"
-        }
+        raise Exception("No file corresponding to the question ID found. Please check the question ID and try again.")
 
     return judge_output
 
@@ -150,7 +179,21 @@ def submit(payload, user_args, DB_CONN_POOL):
             - status (str): The status of the submission ("SUCCESS" or "ERROR").
             - message (str): A message providing additional information about the submission result.
     """
-    judge_output = get_judgement(payload, user_args)
+    try:
+        judge_output = get_judgement(
+            payload, 
+            user_args,
+            base_cpu_timeout=1000,  
+            base_wall_timeout=3000,
+            base_memory_limit=128 * 10**6
+        )
+    except Exception as e:
+        return {
+            "status": "ERROR",
+            "message": f"An error occurred while submitting the code:\n {str(e)}"
+        }
+
+    
     
     if judge_output.get("verdict") == "SYSTEM_ERROR":
         return judge_output
