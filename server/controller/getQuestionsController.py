@@ -37,6 +37,8 @@ def get_questions(questions_folder):
     questions = []
     for root, dirs, _ in os.walk(questions_folder):
         for dir in dirs:
+            if dir.startswith('~'):
+                continue  # Skip directory whose name starts with ~
             dir_path = os.path.join(root, dir)
             for file in os.listdir(dir_path):
                 if file.endswith(".md") or file.endswith(".java") or file.endswith(".py"):
