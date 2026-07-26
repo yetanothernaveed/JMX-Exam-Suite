@@ -62,7 +62,7 @@ def judge_submission(
         "files": [
             {"name": "Main", "content": code},  # <-- Pass the submission code as a file
             {"name": "input.in", "content": input_data},  # <-- Pass input as a file
-            {"name": "expect.out", "content": expected_output}  # <-- Pass expected output as a file
+            {"name": "expected.out", "content": expected_output}  # <-- Pass expected output as a file
         ],
         "run_timeout": wall_timeout_ms,
         "run_cpu_timeout": cpu_timeout_ms,
