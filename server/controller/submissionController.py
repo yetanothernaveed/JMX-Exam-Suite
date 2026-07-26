@@ -21,15 +21,14 @@ def  get_judgement(payload, user_args):
 
     """
     qid = payload.get("qid")
-    exam_id = user_args.get("exam_id")
     questions_folder = user_args.get("questions_folder")
 
     try:
         judge_output = pistonjudge.judge.judge_submission(
             payload["code"],
-            f"{questions_folder}/{exam_id}/{qid}/wrapper/Main.java",
-            f"{questions_folder}/{exam_id}/{qid}/testcases/tc.in",
-            f"{questions_folder}/{exam_id}/{qid}/testcases/tc.out",
+            f"{questions_folder}/{qid}/wrapper/Main.java",
+            f"{questions_folder}/{qid}/testcases/tc.in",
+            f"{questions_folder}/{qid}/testcases/tc.out",
             3000,
             128 * 10**6
         )
@@ -89,12 +88,11 @@ def write_to_files(payload, user_args, score, DB_CONN_POOL):
             - responses_folder (str): The path to the folder where student responses are stored.
     """
     student_id = payload.get("student_id")
-    exam_id = user_args.get("exam_id")
     qid = payload.get("qid")
     code = payload.get("code")
     responses_folder = user_args.get("responses_folder")
 
-    student_folder = f"{responses_folder}/{exam_id}/{student_id}"
+    student_folder = f"{responses_folder}/{student_id}"
     if not os.path.exists(student_folder):
         os.makedirs(student_folder)
 
