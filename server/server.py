@@ -55,8 +55,8 @@ if __name__ == "__main__":
         "section": "1",
         "quiz_number": "0",
         "slot": "SUN_11",
-        "questions_folder_root": Path.home() / "Work/CSE221/questions",
-        "responses_folder_root": Path.home() / "Work/CSE221/responses",
+        "questions_folder_root": Path.home() / "Projects/CSE221/examplesetup/questions",
+        "responses_folder_root": Path.home() / "Projects/CSE221/examplesetup/responses",
         "total_time": "60"
     }
     user_args["exam_id"] = f"{user_args['course']}_{user_args['semester']}{user_args['year']}_section{user_args['section']}_quiz{user_args['quiz_number']}"
