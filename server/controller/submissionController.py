@@ -7,7 +7,7 @@ import os
 from datetime import datetime
 
 LANGUAGE_MULTIPLIERS = {
-    "c++": {"cpu": 1.0, "wall": 2.0, "memory": 1.0, "memory_pad": 0},
+    "c++": {"cpu": 1.0, "wall": 2.0, "memory": 1.0, "memory_pad": 0}, # C++ not supported. For baseline as well as future use.
     "java": {"cpu": 2.0, "wall": 3.0, "memory": 1.5, "memory_pad": 32},
     "python": {"cpu": 3.0, "wall": 4.0, "memory": 1.2, "memory_pad": 128}
 }
@@ -41,8 +41,6 @@ def  get_judgement(
         language = "java"
     elif file_extension == "py":
         language = "python"
-    elif file_extension == "cpp":
-        language = "c++"
     else:
         return {
             "status": "ERROR",
