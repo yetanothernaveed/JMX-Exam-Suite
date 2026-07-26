@@ -5,6 +5,8 @@
 #include "../session/sessionManager.hpp"
 
 #include <string>
+#include <unistd.h>
+#include <climits>
 
 namespace command_handler {
     inline std::string handleHello() {
@@ -211,5 +213,75 @@ namespace command_handler {
         // }
 
         return stats_str;
+    }
+
+    inline std::string handleSubmit(nlohmann::json request) {
+        DaemonSettings settings;
+        SessionManager sessionManager;
+        if (!sessionManager.check_session_exists()) {
+            return "ERROR: No active session to submit solution";
+        }
+
+        char buffer[HOST_NAME_MAX + 1];
+        std::string pc_id {};
+
+        if (gethostname(buffer, sizeof(buffer)) == 0) {
+            pc_id = std::string(buffer);
+        } else {
+            return "Error: Could not retrieve hostname";
+        }
+
+        // Read code from file
+        std::string filename = request["payload"]["filename"].get<std::string>();
+        std::filesystem::path file_path = std::filesystem::path(settings.workspace_directory) / filename;
+
+        if (!std::filesystem::exists(file_path)) {
+            return "Error: File does not exist in exam workspace: " + file_path.string();
+        }
+
+        std::ifstream file(file_path);
+        if (!file.is_open()) {
+            return "Error: Could not open file: " + file_path.string();
+        }
+
+        std::string code((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+        file.close();
+
+        request["payload"]["student_id"] = sessionManager.get_student_id();
+        request["payload"]["pc_id"] = pc_id;
+        request["payload"]["code"] = code;
+
+        int serverFd = server::connectToServer();
+
+        if (serverFd < 0) {
+            return "ERROR: Failed to connect to server";
+        }
+
+        jmx::sendMessage(serverFd, request.dump());
+        std::string response {};
+        nlohmann::json responseJson;
+
+        if (!jmx::recvMessage(serverFd, response)) {
+            return "ERROR: failed to receive response from server"; 
+        } else {
+            responseJson = nlohmann::json::parse(response);
+
+            if (responseJson["status"] == "ERROR") {
+                return std::string("ERROR: ") + responseJson["message"].get<std::string>();
+            }
+        }
+
+        std::string response_msg = std::format(
+            "Solution submitted sucessfully for Question ID {}. Server response:\n"
+            "Verdict: {}\n"
+            "Score: {}\n"
+            "Details: {}\n",
+            request["payload"]["qid"].get<std::string>(),
+            responseJson["payload"]["verdict"].get<std::string>(),
+            responseJson["payload"]["score"].get<int>(),
+            responseJson["payload"]["details"].get<std::string>()
+        );
+
+        return response_msg;
     }
 }

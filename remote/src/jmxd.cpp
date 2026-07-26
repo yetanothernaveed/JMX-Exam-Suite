@@ -52,6 +52,8 @@ namespace {
             return command_handler::handleGetQuestions();
         } else if (command == "get_stats") {
             return command_handler::handleGetStats();
+        } else if (command == "submit") {
+            return command_handler::handleSubmit(request);
         }
         
         return "ERROR: Unknown command";
