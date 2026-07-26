@@ -103,7 +103,7 @@ def update_results(payload, score, DB_CONN_POOL):
             conn.close()
             print("MySQL connection returned to pool.")
 
-def write_to_files(payload, user_args, score, DB_CONN_POOL):
+def write_to_files(payload, user_args, score, file_extension, DB_CONN_POOL):
     """
     Writes the student's code submission to a file in the responses folder.
     Args:
@@ -146,7 +146,7 @@ def write_to_files(payload, user_args, score, DB_CONN_POOL):
             conn.close()
             print("MySQL connection returned to pool.")
 
-    submission_file_name = f"{qid}_{socket.gethostname()}_{datetime.now().time()}.java"
+    submission_file_name = f"{qid}_{socket.gethostname()}_{datetime.now().time()}.{file_extension}"
 
     if score >= max_score:
         best_folder = f"{student_folder}/best/{submission_file_name}"
@@ -198,7 +198,7 @@ def submit(payload, user_args, DB_CONN_POOL):
 
     score = judge_output.get("score", 0)
     update_results(payload, score, DB_CONN_POOL)
-    write_to_files(payload, user_args, score, DB_CONN_POOL)
+    write_to_files(payload, user_args, score, payload.get("filename").split(".")[-1], DB_CONN_POOL)
 
     return {
         "status": "SUCCESS",
