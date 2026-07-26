@@ -1,0 +1,17 @@
+{
+    'run': 
+        {
+            'signal': None, 
+            'stdout': '{"case": 1, "passed": true, "time_ms": 0.00}\n{"case": 2, "passed": true, "time_ms": 0.00}\n{"case": 3, "passed": true, "time_ms": 0.01}\n{"case": 4, "passed": true, "time_ms": 0.07}\n{"case": 5, "passed": true, "time_ms": 0.59}\n{"case": 6, "passed": true, "time_ms": 5.90}\n{"case": 7, "passed": true, "time_ms": 5.80}\n{"case": 8, "passed": true, "time_ms": 3.59}\n', 
+            'stderr': '', 
+            'code': 0, 
+            'output': '{"case": 1, "passed": true, "time_ms": 0.00}\n{"case": 2, "passed": true, "time_ms": 0.00}\n{"case": 3, "passed": true, "time_ms": 0.01}\n{"case": 4, "passed": true, "time_ms": 0.07}\n{"case": 5, "passed": true, "time_ms": 0.59}\n{"case": 6, "passed": true, "time_ms": 5.90}\n{"case": 7, "passed": true, "time_ms": 5.80}\n{"case": 8, "passed": true, "time_ms": 3.59}\n', 
+            'memory': 101364000, 
+            'message': None, 
+            'status': None, 
+            'cpu_time': 1343, 
+            'wall_time': 663
+        }, 
+        'language': 'java', 
+        'version': '15.0.2'
+}
