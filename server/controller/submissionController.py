@@ -56,9 +56,9 @@ def  get_judgement(
     try:
         judge_output = pistonjudge.judge.judge_submission(
             payload["code"],
-            f"{questions_folder}/{qid}/wrapper/Main.{file_extension}",
-            f"{questions_folder}/{qid}/testcases/tc.in",
-            f"{questions_folder}/{qid}/testcases/tc.out",
+            f"{questions_folder}/{qid.upper()}/wrapper/Main.{file_extension}",
+            f"{questions_folder}/{qid.upper()}/testcases/tc.in",
+            f"{questions_folder}/{qid.upper()}/testcases/tc.out",
             wall_timeout,
             cpu_timeout,
             memory_limit,
