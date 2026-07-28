@@ -3,6 +3,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <string>
 #include <iostream>
 
@@ -27,7 +28,17 @@ namespace server {
             close(sock);
             return -1;
         }
-        
+
+        struct timeval timeout;
+        timeout.tv_sec = 30;
+        timeout.tv_usec = 0;
+
+        if (setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) < 0) {
+            std::cerr << "Error setting socket timeout" << std::endl;
+            close(sock);
+            return -1;
+        }
+
         if (connect(sock, (struct sockaddr*)&server_address, sizeof(server_address)) < 0) {
             std::cerr << "Connection Failed" << std::endl;
             close(sock);
