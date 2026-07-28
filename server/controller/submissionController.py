@@ -1,4 +1,4 @@
-import pistonjudge
+import pistonjudge.src.Judge as pistonjudge
 import pistonjudge.judge
 
 from mysql.connector import Error

@@ -3,6 +3,9 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pistonjudge"
+name = "Judge"
 version = "0.1.0"
 description = "Piston Judge package for creating problem judges"
+
+[tool.setuptools.packages.find]
+where = ["src"] 
