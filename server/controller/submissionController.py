@@ -1,73 +1,10 @@
-import pistonjudge.src.Judge as pistonjudge
-import pistonjudge.judge
+from Judge import judge
+from user_args import dynamic_loader
 
 from mysql.connector import Error
 import socket
 import os
 from datetime import datetime
-
-LANGUAGE_MULTIPLIERS = {
-    "c++": {"cpu": 1.0, "wall": 2.0, "memory": 1.0, "memory_pad": 0}, # C++ not supported. For baseline as well as future use.
-    "java": {"cpu": 2.0, "wall": 3.0, "memory": 1.5, "memory_pad": 32},
-    "python": {"cpu": 3.0, "wall": 4.0, "memory": 1.2, "memory_pad": 128}
-}
-
-def  get_judgement(
-        payload, user_args,
-        base_cpu_timeout,
-        base_wall_timeout,
-        base_memory_limit
-    ):
-    """
-    Submits the code to the PistonJudge API for execution and returns the result.
-    Args:
-        payload (dict): A dictionary containing the submission details, including:
-            - student_id (str): The ID of the student submitting the code.
-            - qid (str): The question ID for which the code is being submitted.
-            - code (str): The code to be executed.
-        user_args (dict): A dictionary containing user arguments, including:
-            - responses_folder (str): The path to the folder where student responses are stored.
-            - questions_folder (str): The path to the folder where question files are stored.
-            - exam_id (str): The ID of the exam for which the code is being submitted.
-
-    """
-    qid = payload.get("qid")
-    questions_folder = user_args.get("questions_folder")
-    language = None
-
-    file_extension = payload.get("filename").split(".")[-1].lower()  # Get the file extension in lowercase
-
-    if file_extension == "java":
-        language = "java"
-    elif file_extension == "py":
-        language = "python"
-    else:
-        return {
-            "status": "ERROR",
-            "message": "Unsupported file type. Only .java, .py, and .cpp files are currently supported."
-        }
-
-    cpu_timeout = int(base_cpu_timeout * LANGUAGE_MULTIPLIERS[language]["cpu"])
-    wall_timeout = int(base_wall_timeout * LANGUAGE_MULTIPLIERS[language]["wall"])
-    memory_limit = int(base_memory_limit * LANGUAGE_MULTIPLIERS[language]["memory"]) + LANGUAGE_MULTIPLIERS[language]["memory_pad"]
-
-    try:
-        judge_output = pistonjudge.judge.judge_submission(
-            payload["code"],
-            f"{questions_folder}/{qid.upper()}/~wrapper/Main.{file_extension}",
-            f"{questions_folder}/{qid.upper()}/~testcases/tc.in",
-            f"{questions_folder}/{qid.upper()}/~testcases/tc.out",
-            wall_timeout,
-            cpu_timeout,
-            memory_limit,
-            language
-        )
-
-    except Exception as e:
-        print(f"Error during code submission: {e}")
-        raise Exception("No file corresponding to the question ID found. Please check the question ID and try again.")
-
-    return judge_output
 
 def update_results(payload, score, DB_CONN_POOL):
     """
@@ -177,13 +114,51 @@ def submit(payload, user_args, DB_CONN_POOL):
             - status (str): The status of the submission ("SUCCESS" or "ERROR").
             - message (str): A message providing additional information about the submission result.
     """
+    qid = payload.get("qid").upper()
+    questions_folder = user_args.get("questions_folder")
+    file_extension = payload.get("filename").split(".")[-1].lower()
+
+    wrapper_file_path = f"{questions_folder}/{qid}/~wrapper/Main.{file_extension}"
+    input_file_path = f"{questions_folder}/{qid}/~testcases/tc.in"
+    output_file_path = f"{questions_folder}/{qid}/~testcases/tc.out"
+    language = None
+
+    if file_extension == "java":
+        language = "java"
+    elif file_extension == "py":
+        language = "python"
+    elif file_extension == "cpp":
+        language = "c++"
+    else:
+        return {
+            "status": "ERROR",
+            "message": "Unsupported file type. Only .java, .py, and .cpp files are currently supported."
+        }
+
+    ProblemJudge = None
     try:
-        judge_output = get_judgement(
-            payload, 
-            user_args,
-            base_cpu_timeout=1000,  
-            base_wall_timeout=3000,
-            base_memory_limit=128 * 10**6
+        judge_path = f"{questions_folder}/{qid}/~judge/{qid}Judge.py"
+        ProblemJudge = dynamic_loader.load_module_from_path(judge_path)
+    except Exception as e:
+        return {
+            "status": "ERROR",
+            "message": f"An error occurred while submitting the code:\n {str(e)}"
+        }
+
+    if not ProblemJudge:
+        return {
+            "status": "ERROR",
+            "message": f"An error occurred while submitting the code:\n ProblemJudge is None. Please check the question ID and try again."
+        }
+
+    try:
+        judge = ProblemJudge.Judge()
+        judge_output = judge.submit(
+            submission_code=payload["code"],
+            wrapper_file_path=wrapper_file_path,
+            input_file_path=input_file_path,
+            output_file_path=output_file_path,
+            language=language
         )
     except Exception as e:
         return {
@@ -193,7 +168,7 @@ def submit(payload, user_args, DB_CONN_POOL):
 
     
     
-    if judge_output.get("verdict") == "SYSTEM_ERROR":
+    if judge_output.get("verdict") == "UNKNOWN_ERROR" or judge_output.get("verdict") == "ERROR":
         return judge_output
 
     score = judge_output.get("score", 0)
@@ -214,18 +189,19 @@ def submit(payload, user_args, DB_CONN_POOL):
 if __name__ == "__main__":
     # Example usage for testing purposes only
     user_args = {
-        "questions_folder": "/home/naveed/Work/CSE221/questions",
-        "responses_folder": "/home/naveed/Work/CSE221/responses",
+        "questions_folder": "/home/naveed/Projects/CSE221/examplesetup/questions/cse221_summer2026_section1_quiz0",
+        "responses_folder": "/home/naveed/Projects/CSE221/examplesetup/responses/cse221_summer2026_section1_quiz0",
         "exam_id": "cse221_summer2026_section1_quiz0"
     }
 
-    with open("/home/naveed/Projects/CSE221/server/controller/A.java", "r") as f:
+    with open("/home/naveed/Projects/CSE221/examplesetup/questions/cse221_summer2026_section1_quiz0/Q102/Q102.py", "r") as f:
         code = f.read()
 
     payload = {
         "student_id": "CSYR",
-        "qid": "Q101",
+        "qid": "Q102",
         "pc_id": "pc1",
+        "filename": "Q102.py",
         "code": code
     }
 
