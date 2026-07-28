@@ -1,45 +1,78 @@
+from pathlib import Path
+
+def validate_questions_folder(questions_folder_root, exam_id):
+    """
+    Validates the questions folder structure for a given exam.
+    """
+    questions_root = Path(questions_folder_root)
+    exam_folder = questions_root / exam_id
+
+    # 1. Check if the exam_id folder exists
+    if not exam_folder.exists() or not exam_folder.is_dir():
+        raise FileNotFoundError(f"Questions folder with exam ID does not exist: {exam_folder}")
+
+    # 2. Find and print subfolders
+    subfolders = [f for f in exam_folder.iterdir() if f.is_dir()]
+    
+    print(f"Found {len(subfolders)} folder(s) inside '{exam_folder}':")
+    for folder in subfolders:
+        print(f" - {folder.name}")
+
+    # 3. Ensure each subfolder has the required inner folders
+    required_inner_folders = {"~judge", "~testcases", "~wrapper"}
+    
+    for folder in subfolders:
+        existing_inner_folders = {child.name for child in folder.iterdir() if child.is_dir()}
+        missing_folders = required_inner_folders - existing_inner_folders
+        
+        if missing_folders:
+            raise FileNotFoundError(
+                f"Folder '{folder.name}' is missing the following required subfolder(s): "
+                f"{', '.join(missing_folders)}"
+            )
+
+    return exam_folder
+
+
+def validate_responses_folder(responses_folder_root, exam_id):
+    """
+    Validates and creates the responses folder structure for a given exam if necessary.
+    """
+    responses_root = Path(responses_folder_root)
+    exam_folder = responses_root / exam_id
+
+    # 1 & 2. Check if the folder exists, create if it doesn't
+    if exam_folder.exists() and exam_folder.is_dir():
+        print(f"Response folder with exam ID already exists at: {exam_folder}. Moving on.")
+    else:
+        # parents=True acts like os.makedirs, ensuring root folders are created if missing
+        exam_folder.mkdir(parents=True, exist_ok=True)
+        print(f"Response folder did not exist, so it was created at: {exam_folder}")
+
+    return exam_folder
+
+
 def validate(questions_folder_root, responses_folder_root, exam_id):
     """
-    Creates the folder structure for questions and responses if they don't exist.
+    Main orchestration function to validate both questions and responses folders.
     
     Args:
-        questions_folder_root (str): The path to the questions folder root.
-        responses_folder_root (str): The path to the responses folder root.
-        exam_id (str): The ID of the exam for which to create folders.
+        questions_folder_root (str or Path): The path to the questions folder root.
+        responses_folder_root (str or Path): The path to the responses folder root.
+        exam_id (str): The ID of the exam.
+        
+    Returns:
+        tuple: (validated_questions_path, validated_responses_path)
     """
-    import os
-
-    # Create questions folder if it doesn't exist
-    if not os.path.exists(questions_folder_root):
-        # raise error
-        raise FileNotFoundError(f"Questions folder root does not exist: {questions_folder_root}")
-
-    if not os.path.exists(questions_folder_root / exam_id):
-        os.makedirs(questions_folder_root / exam_id)
-        raise FileNotFoundError(f"Questions folder with exam id does not exist: {questions_folder_root / exam_id}")
-
-    number_of_questions_files_found = 0 
-    for root, dirs, _ in os.walk(questions_folder_root / exam_id):
-            for dir in dirs:
-                dir_path = os.path.join(root, dir)
-                for file in os.listdir(dir_path):
-                    if file.endswith(".md"):
-                        number_of_questions_files_found += 1
-
-    if number_of_questions_files_found == 0:
-        raise FileNotFoundError(f"No markdown question files found in the questions folder: {questions_folder_root / exam_id}")
-
-    # Create responses folder if it doesn't exist
-    if not os.path.exists(responses_folder_root):
-        os.makedirs(responses_folder_root)
-        print(f"Responses folder did not exist so it was created: {responses_folder_root}")
+    # Cast exam_id to string to ensure safe path joining
+    exam_id = str(exam_id)
     
-
-    # Create exam folder inside responses folder if it doesn't exist
-    exam_folder = os.path.join(responses_folder_root, exam_id)
-    if not os.path.exists(exam_folder):
-        os.makedirs(exam_folder)
-        print(f"Exam folder did not exist so it was created: {exam_folder}")
-
-    return (questions_folder_root / exam_id, exam_folder)
+    print("--- Validating Questions Folder ---")
+    questions_path = validate_questions_folder(questions_folder_root, exam_id)
     
+    print("\n--- Validating Responses Folder ---")
+    responses_path = validate_responses_folder(responses_folder_root, exam_id)
+    
+    print("\nFolder Validations Complete.")
+    
+    return questions_path, responses_path
