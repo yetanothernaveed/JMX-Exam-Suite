@@ -6,6 +6,7 @@
 #include <map>
 #include <algorithm>
 #include <filesystem>
+#include <syslog.h>
 
 namespace fs = std::filesystem;
 
@@ -67,7 +68,16 @@ public:
 
     // Write the current in-memory configurations back to the file
     bool save(const fs::path& file_path) {
+        // Create folder and file if they don't exist
+        if (!fs::exists(file_path.parent_path())) {
+            std::cout << "Creating directory: " << file_path.parent_path() << std::endl;
+            syslog(LOG_INFO, "/etc/jmxd does not exist.\nCreating directory: %s", file_path.parent_path().c_str());
+            fs::create_directories(file_path.parent_path());
+        }
+        
         std::ofstream file(file_path, std::ios::out | std::ios::trunc);
+
+
         if (!file.is_open()) {
             std::cerr << "Failed to open config file for writing: " << file_path << std::endl;
             return false;
