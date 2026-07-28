@@ -59,7 +59,7 @@ for `src/client.cpp` → `jmx`.)
 1. **Install the binaries**
 
    ```
-   sudo cmake --install build
+   sudo cmake --install build --prefix /usr/local
    # or manually:
    sudo install -m 755 build/jmxd /usr/local/bin/jmxd
    sudo install -m 755 build/jmx  /usr/local/bin/jmx
