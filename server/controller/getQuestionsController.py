@@ -41,7 +41,7 @@ def get_questions(questions_folder):
                 continue  # Skip directory whose name starts with ~
             dir_path = os.path.join(root, dir)
             for file in os.listdir(dir_path):
-                if file.endswith(".md") or file.endswith(".java") or file.endswith(".py"):
+                if file.endswith(".md") or file.endswith(".java") or file.endswith(".py") or file.endswith(".cpp"):
                     questions.append({
                         "qid": dir,
                         "path": os.path.join(dir_path, file),
