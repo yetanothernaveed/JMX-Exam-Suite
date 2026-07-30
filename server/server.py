@@ -3,7 +3,7 @@ from pathlib import Path
 
 from router import router
 from salp import send, receive
-from user_args import folderStructure
+from utils import folderStructure
 
 def start_server(host='0.0.0.0', port=8080, user_args=None, DB_CONN_POOL=None):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -36,7 +36,7 @@ def start_server(host='0.0.0.0', port=8080, user_args=None, DB_CONN_POOL=None):
         server_socket.close()
 
 if __name__ == "__main__":
-    from user_args import args, folderStructure
+    from utils import args, folderStructure
     from db.connectToDB import connect_to_mysql_database
     
     # user_args = args.take_args()

@@ -3,7 +3,7 @@
 // Usage:
 //   jmx hello
 
-#include "./headers/common.hpp"
+#include "./salp/common.hpp"
 #include "./lib/CLI11.hpp"
 
 // Commands

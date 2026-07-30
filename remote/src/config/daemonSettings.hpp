@@ -1,7 +1,7 @@
 #pragma once
 
 #include "configManager.hpp"
-#include "../headers/common.hpp"
+#include "../salp/common.hpp"
 #include <string>
 
 struct DaemonSettings {

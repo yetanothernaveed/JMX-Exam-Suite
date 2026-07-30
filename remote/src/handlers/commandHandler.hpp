@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../headers/connectToServer.hpp"
+#include "../utils/connectToServer.hpp"
 #include "../lib/json.hpp"
 #include "../session/sessionManager.hpp"
 

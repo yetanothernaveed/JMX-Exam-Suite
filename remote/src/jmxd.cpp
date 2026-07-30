@@ -15,10 +15,10 @@
 //  - The socket file's permissions (set below) are the actual access
 //    control boundary. Keep them as tight as your use case allows.
 
-#include "./headers/common.hpp"
+#include "./salp/common.hpp"
 #include "./handlers/commandHandler.hpp"
-#include "./headers/createUnixSocket.hpp"
-#include "./headers/credentials.hpp"
+#include "./utils/createUnixSocket.hpp"
+#include "./utils/credentials.hpp"
 #include "./lib/json.hpp"
 #include "./config/daemonSettings.hpp"
 #include "./session/sessionManager.hpp"

@@ -1,5 +1,5 @@
 from Judge import judge
-from user_args import dynamic_loader
+from utils import dynamic_loader
 
 from mysql.connector import Error
 import socket
