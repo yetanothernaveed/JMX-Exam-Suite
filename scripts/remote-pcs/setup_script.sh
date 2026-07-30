@@ -229,6 +229,7 @@ RememberLastSession=false
 EOF
 
 echo ">>> [7.4/8] Installing login background..."
+install_plymouth_branding
 install_login_background
 
 echo ">>> Exam kiosk setup complete."
