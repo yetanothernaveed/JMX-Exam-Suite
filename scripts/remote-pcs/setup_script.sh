@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 
+echo ">>> [0.1/8] Load custom branding..."
+# Load helper functions
+source branding/branding.sh
+
 echo ">>> [1/8] Installing system dependencies..."
 sudo apt update
 sudo apt install -y build-essential python3 openjdk-21-jdk openbox firejail sqlite3 libsqlite3-dev
@@ -14,18 +18,20 @@ rm -f packages.microsoft.gpg
 sudo apt update && sudo apt install -y code
 
 echo ">>> [3/8] Creating examkiosk user and workspace..."
-sudo adduser --disabled-password --gecos "" examkiosk
+if ! id examkiosk &>/dev/null; then
+    adduser --disabled-password --gecos "" examkiosk
+fi
 
-# Prompt for password at runtime instead of hardcoding it
-echo "Set password for examkiosk user:"
-sudo passwd examkiosk
+EXAMKIOSK_PASSWORD="2304"
+# Set the default password
+echo "examkiosk:${EXAMKIOSK_PASSWORD}" | chpasswd
 
-sudo mkdir -p /home/examkiosk/exam_workspace
-sudo chown examkiosk:examkiosk /home/examkiosk/exam_workspace
-sudo chmod 700 /home/examkiosk/exam_workspace
+mkdir -p /home/examkiosk/exam_workspace
+chown examkiosk:examkiosk /home/examkiosk/exam_workspace
+chmod 700 /home/examkiosk/exam_workspace
 
 echo ">>> [3.1/8] Creating new user group jmx and adding user examkiosk to the jmx group"
-sudo groupadd --system jmx
+getent group jmx >/dev/null || groupadd --system jmx
 sudo usermod -aG jmx examkiosk
 
 echo ">>> [4/8] Setting up VS Code config directories and installing extensions..."
@@ -158,7 +164,7 @@ ALLOWED_COMMANDS=("ls" "clear" "java" "javac" "python3" "gcc" "g++")
 for cmd in "${ALLOWED_COMMANDS[@]}"; do
     CMD_PATH=$(which $cmd 2>/dev/null)
     if [ -n "$CMD_PATH" ]; then
-        sudo ln -s "$CMD_PATH" "/home/examkiosk/restricted_bin/$cmd"
+        sudo ln -sf "$CMD_PATH" "/home/examkiosk/restricted_bin/$cmd"
     fi
 done
 
@@ -181,7 +187,7 @@ sudo chown -R root:root /home/examkiosk/restricted_bin
 # Force the operating system to default this user to restricted bash
 sudo usermod -s /bin/rbash examkiosk
 
-echo ">>> [8/8] Locking down permissions..."
+echo ">>> [7.1/8] Locking down permissions..."
 # Run VS Code once (headless) to ensure extension file structure is initialised
 sudo -u examkiosk code --list-extensions
 
@@ -203,9 +209,26 @@ sudo chmod 755 /home/examkiosk/.vscode/extensions
 # echo ">>> [Extra] Deleting all other desktop environments"
 # sudo find /usr/share/xsessions/ -name "*.desktop" ! -name "exam.desktop" -delete
 
-echo ">>> [7.9/8] Setting up JMX daemon config files"
-
+echo ">>> [7.2/8] Setting up JMX daemon config files"
 sudo mkdir -p /etc/jmxd 
 
+echo ">>> [7.3/8] Creating autologin configuration for examkiosk user..."
+mkdir -p /etc/sddm.conf.d
+cat > /etc/sddm.conf.d/autologin.conf <<EOF
+[Autologin]
+User=examkiosk
+Session=exam
+Relogin=false
+
+[General]
+DefaultSession=exam.desktop
+
+[Users]
+RememberLastUser=false
+RememberLastSession=false
+EOF
+
+echo ">>> [7.4/8] Installing login background..."
+install_login_background
 
 echo ">>> Exam kiosk setup complete."
