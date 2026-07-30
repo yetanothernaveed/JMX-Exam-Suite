@@ -6,7 +6,9 @@ from controller.submissionController import submit
 def router(message_json, user_args, DB_CONN_POOL):
     action = message_json.get("action")
 
-    if action == "start":
+    if action == "hello":
+        return {"status": "SUCCESS", "message": "Hi! I am server :P."}
+    elif action == "start":
         return start_controller(message_json.get("payload"), user_args)
     elif action == "end":
         return end_controller(message_json.get("payload"), user_args)
