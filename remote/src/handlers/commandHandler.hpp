@@ -22,22 +22,27 @@ namespace command_handler {
                     "Contact administrator.\n";
             }
 
-            // Send a simple ping message to the server
-            jmx::sendMessage(serverFd, request.dump());
-
-
             std::string response {};
-            nlohmann::json responseJson;
+            nlohmann::json responseJson {};
 
-            if (!jmx::recvMessage(serverFd, response)) {
-                return "ERROR: failed to receive response from server"; 
-            } else {
-                responseJson = nlohmann::json::parse(response);
-
-                if (responseJson["status"] == "ERROR") {
-                    return std::string("ERROR: ") + responseJson["message"].get<std::string>();
+            try {
+                // Send a simple ping message to the server
+                jmx::sendMessage(serverFd, request.dump());
+    
+                if (!jmx::recvMessage(serverFd, response)) {
+                    return "ERROR: failed to receive response from server"; 
+                } else {
+                    responseJson = nlohmann::json::parse(response);
+    
+                    if (responseJson["status"] == "ERROR") {
+                        return std::string("ERROR: ") + responseJson["message"].get<std::string>();
+                    }
                 }
+
+            } catch (const std::exception& e) {
+                return std::string("ERROR: Exception occurred while communicating with server: ") + e.what();
             }
+
 
             return responseJson["message"].get<std::string>();
         }
@@ -46,6 +51,12 @@ namespace command_handler {
     }
 
     inline std::string handleStart(const nlohmann::json& payload) {
+        SessionManager sessionManager;
+        if (sessionManager.check_session_exists()) {
+            return 
+                "ERROR: A session is already active. Please end the current session before starting new one.\n  Use command `jmx end` to end the current session.";
+        }
+
         int serverFd = server::connectToServer();
 
         if (serverFd < 0) {
@@ -53,23 +64,26 @@ namespace command_handler {
         }
         
         std::string payloadStr = payload.dump();
-        
-        jmx::sendMessage(serverFd, payloadStr);
         std::string response {};
-        nlohmann::json responseJson;
-
-        if (!jmx::recvMessage(serverFd, response)) {
-            return "ERROR: failed to receive response from server"; 
-        } else {
-            responseJson = nlohmann::json::parse(response);
-
-            if (responseJson["status"] == "ERROR") {
-                return std::string("ERROR: ") + responseJson["message"].get<std::string>();
+        nlohmann::json responseJson {};
+        
+        try {
+            jmx::sendMessage(serverFd, payloadStr);
+    
+            if (!jmx::recvMessage(serverFd, response)) {
+                return "ERROR: failed to receive response from server"; 
+            } else {
+                responseJson = nlohmann::json::parse(response);
+    
+                if (responseJson["status"] == "ERROR") {
+                    return std::string("ERROR: ") + responseJson["message"].get<std::string>();
+                }
             }
+        } catch (const std::exception& e) {
+            return std::string("ERROR: Exception occurred while communicating with server: ") + e.what();
         }
 
         // Create session for student
-        SessionManager sessionManager;
         std::string error;
 
         if (!sessionManager.create_session(
@@ -81,17 +95,25 @@ namespace command_handler {
             return error;
         }
 
-        exam_workspace_handler::clear_directory();
+        try {
+            exam_workspace_handler::clear_directory();
+        } catch (const std::exception& e) {
+            return std::string("ERROR: Exception occurred while clearing exam workspace: ") + e.what();
+        }
         
-        // For each question in responseJson["payload"]["questions"], write to a file in the exam_workspace directory
-        for (const auto& question : responseJson["payload"]["questions"]) {
-            std::string question_filename = question["qid"].get<std::string>() + question["extension"].get<std::string>();
-
-            exam_workspace_handler::write_file_to_directory(
-                std::filesystem::path(DaemonSettings().workspace_directory + "/" + question["qid"].get<std::string>()),
-                question_filename,
-                question["content"].get<std::string>()
-            );
+        try {
+            // For each question in responseJson["payload"]["questions"], write to a file in the exam_workspace directory
+            for (const auto& question : responseJson["payload"]["questions"]) {
+                std::string question_filename = question["qid"].get<std::string>() + question["extension"].get<std::string>();
+    
+                exam_workspace_handler::write_file_to_directory(
+                    std::filesystem::path(DaemonSettings().workspace_directory + "/" + question["qid"].get<std::string>()),
+                    question_filename,
+                    question["content"].get<std::string>()
+                );
+            }
+        } catch (const std::exception& e) {
+            return std::string("ERROR: Exception occurred while writing questions to exam workspace: ") + e.what();
         }
 
         std::string response_msg = 
@@ -123,18 +145,23 @@ namespace command_handler {
                 }}
             };
             
-            jmx::sendMessage(serverFd, message.dump());
             std::string response {};
             nlohmann::json responseJson;
 
-            if (!jmx::recvMessage(serverFd, response)) {
-                return "ERROR: failed to receive response from server"; 
-            } else {
-                responseJson = nlohmann::json::parse(response);
-
-                if (responseJson["status"] == "ERROR") {
-                    return std::string("ERROR: ") + responseJson["message"].get<std::string>();
+            try {
+                jmx::sendMessage(serverFd, message.dump());
+    
+                if (!jmx::recvMessage(serverFd, response)) {
+                    return "ERROR: failed to receive response from server"; 
+                } else {
+                    responseJson = nlohmann::json::parse(response);
+    
+                    if (responseJson["status"] == "ERROR") {
+                        return std::string("ERROR: ") + responseJson["message"].get<std::string>();
+                    }
                 }
+            } catch (const std::exception& e) {
+                return std::string("ERROR: Exception occurred while communicating with server: ") + e.what();
             }
 
         } 
@@ -179,30 +206,39 @@ namespace command_handler {
         nlohmann::json message = {
             {"action", "get_questions"}
         };
-
-        jmx::sendMessage(serverFd, message.dump());
+        
         std::string response {};
         nlohmann::json responseJson;
 
-        if (!jmx::recvMessage(serverFd, response)) {
-            return "ERROR: failed to receive response from server"; 
-        } else {
-            responseJson = nlohmann::json::parse(response);
-
-            if (responseJson["status"] == "ERROR") {
-                return std::string("ERROR: ") + responseJson["message"].get<std::string>();
+        try {
+            jmx::sendMessage(serverFd, message.dump());
+    
+            if (!jmx::recvMessage(serverFd, response)) {
+                return "ERROR: failed to receive response from server"; 
+            } else {
+                responseJson = nlohmann::json::parse(response);
+    
+                if (responseJson["status"] == "ERROR") {
+                    return std::string("ERROR: ") + responseJson["message"].get<std::string>();
+                }
             }
+        } catch (const std::exception& e) {
+            return std::string("ERROR: Exception occurred while fetching questions: ") + e.what();
         }
 
-        // Write questions to exam_workspace
-        for (const auto& question : responseJson["payload"]["questions"]) {
-            std::string question_filename = question["qid"].get<std::string>() + question["extension"].get<std::string>();
-
-            exam_workspace_handler::write_file_to_directory(
-                std::filesystem::path(DaemonSettings().workspace_directory + "/" + question["qid"].get<std::string>()),
-                question_filename,
-                question["content"].get<std::string>()
-            );
+        try {
+            // Write questions to exam_workspace
+            for (const auto& question : responseJson["payload"]["questions"]) {
+                std::string question_filename = question["qid"].get<std::string>() + question["extension"].get<std::string>();
+    
+                exam_workspace_handler::write_file_to_directory(
+                    std::filesystem::path(DaemonSettings().workspace_directory + "/" + question["qid"].get<std::string>()),
+                    question_filename,
+                    question["content"].get<std::string>()
+                );
+            }
+        } catch (const std::exception& e) {
+            return std::string("ERROR: Exception occurred while writing questions to exam workspace: ") + e.what();
         }
 
         return "Successfully fetched questions and saved to exam workspace.";
@@ -297,18 +333,23 @@ namespace command_handler {
             return "ERROR: Failed to connect to server";
         }
 
-        jmx::sendMessage(serverFd, request.dump());
         std::string response {};
         nlohmann::json responseJson;
-
-        if (!jmx::recvMessage(serverFd, response)) {
-            return "ERROR: failed to receive response from server"; 
-        } else {
-            responseJson = nlohmann::json::parse(response);
-
-            if (responseJson["status"] == "ERROR") {
-                return std::string("ERROR: ") + responseJson["message"].get<std::string>();
+        
+        try {
+            jmx::sendMessage(serverFd, request.dump());
+    
+            if (!jmx::recvMessage(serverFd, response)) {
+                return "ERROR: failed to receive response from server"; 
+            } else {
+                responseJson = nlohmann::json::parse(response);
+    
+                if (responseJson["status"] == "ERROR") {
+                    return std::string("ERROR: ") + responseJson["message"].get<std::string>();
+                }
             }
+        } catch (const std::exception& e) {
+            return std::string("ERROR: Exception occurred while submitting solution: ") + e.what();
         }
 
         std::string response_msg = std::format(
