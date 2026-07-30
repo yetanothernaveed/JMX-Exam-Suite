@@ -221,28 +221,36 @@ namespace command_handler {
         }
 
         nlohmann::json message = {
-            {"action", "get_stats"}
+            {"action", "get_stats"},
+            {"payload", {
+                {"student_id", sessionManager.get_student_id()}
+            }}
         };
 
-        jmx::sendMessage(serverFd, message.dump());
-        std::string response {};
-        nlohmann::json responseJson;
+        std::string stats_str;
 
-        if (!jmx::recvMessage(serverFd, response)) {
-            return "ERROR: failed to receive response from server"; 
-        } else {
-            responseJson = nlohmann::json::parse(response);
-
-            if (responseJson["status"] == "ERROR") {
-                return std::string("ERROR: ") + responseJson["message"].get<std::string>();
+        try {
+            jmx::sendMessage(serverFd, message.dump());
+            std::string response {};
+            nlohmann::json responseJson;
+    
+            if (!jmx::recvMessage(serverFd, response)) {
+                return "ERROR: failed to receive response from server"; 
+            } else {
+                responseJson = nlohmann::json::parse(response);
+    
+                if (responseJson["status"] == "ERROR") {
+                    return std::string("ERROR: ") + responseJson["message"].get<std::string>();
+                }
             }
+    
+            // Format the stats nicely
+            stats_str = "\n🟢🟢🟢🟢🟢🟢 SUCCESS 🟢🟢🟢🟢🟢🟢🟢\n";
+            stats_str += responseJson["message"].get<std::string>() + "\n";
+            stats_str += responseJson["payload"]["stats"].get<std::string>() + "\n";
+        } catch (const std::exception& e) {
+            return std::string("ERROR: Exception occurred while fetching stats: ") + e.what();
         }
-
-        // Format the stats nicely
-        std::string stats_str = "Exam Statistics:\n";
-        // for (const auto& stat : responseJson["payload"]["stats"]) {
-        //     stats_str += stat["name"].get<std::string>() + ": " + std::to_string(stat["value"].get<int>()) + "\n";
-        // }
 
         return stats_str;
     }
