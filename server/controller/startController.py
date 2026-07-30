@@ -1,6 +1,7 @@
 import db.connectToDB
 from db.createAndPopulate import DatabaseError
 from controller.getQuestionsController import get_questions_controller
+from utils.promptWindow import request_approval_dialog
 
 import os
 
@@ -9,6 +10,7 @@ def start_controller(payload, user_args=None):
         raise ValueError("Start Controller: User arguments must be provided")
     
     student_id = payload.get("student_id")
+    hostname = payload.get("hostname")
 
     if db.connectToDB.DB_CONN_POOL:
         conn = db.connectToDB.DB_CONN_POOL.get_connection()
@@ -23,6 +25,34 @@ def start_controller(payload, user_args=None):
             if not os.path.exists(student_folder_path):
                 os.makedirs(student_folder_path)
                 print(f"Student folder did not exist so it was created: {student_folder_path}")
+
+            # Check if an active session exists for this hostname and a different student_id
+            cursor.execute("SELECT * FROM sessions WHERE hostname = %s AND student_id != %s", (hostname, student_id))
+            active_session = cursor.fetchone()
+
+            if active_session:
+                prompt_msg = (
+                    f"An active session already exists for hostname '{hostname}' "
+                    f"belonging to Student ID: '{active_session[1]}'.\n"
+                    f"Student ID '{student_id}' is requesting to overwrite this session.\n"
+                    f"If a student knowingly did this without a valid reason, consider this an academic integrity violation.\n"
+                    f"Would you like to approve the session override?"
+                )
+
+                # Spawn the external terminal window and wait for approval
+                approved = request_approval_dialog("Session Override Request", prompt_msg)
+                
+                if not approved:
+                    print(f"Approval denied or timed out for hostname {hostname}.")
+                    return {
+                        "status": "ERROR",
+                        "message": f"An active session already exists for hostname {hostname} with a different student ID ({active_session[1]}). Session override approval was denied."
+                    }
+            
+            # Insert or update the session for this hostname and student_id
+            cursor.execute("REPLACE INTO sessions (hostname, student_id) VALUES (%s, %s)", (hostname, student_id))
+            conn.commit()
+            print(f"Session started for student {student_id} on hostname {hostname}.")
             
             return {
                 "status": "SUCCESS", 
