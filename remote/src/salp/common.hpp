@@ -26,7 +26,7 @@ inline constexpr const char* kSocketPath = "/run/jmx/jmx.sock";
 
 // Upper bound on a single message. Keeps a misbehaving or malicious
 // peer from making the daemon allocate unbounded memory.
-inline constexpr uint32_t kMaxMessageSize = 64 * 1024; // 64 KiB
+inline constexpr uint32_t kMaxMessageSize = 64 * 1024 * 1024; // 64 MiB
 
 inline bool readFull(int fd, void* buf, size_t len) {
     auto* p = static_cast<uint8_t*>(buf);
