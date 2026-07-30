@@ -1,4 +1,5 @@
 #include "../salp/common.hpp"
+#include "../config/daemonSettings.hpp"
 
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -9,8 +10,9 @@
 
 
 namespace server {
-    const char* IP = "127.0.0.1";
-    const int PORT = 8080;
+    DaemonSettings settings;
+    const char* IP = settings.server_address.c_str();
+    const int PORT = settings.server_port.empty() ? 8080 : std::stoi(settings.server_port);
 
     inline int connectToServer() {
         int sock = socket(AF_INET, SOCK_STREAM, 0);
