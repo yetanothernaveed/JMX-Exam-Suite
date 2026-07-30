@@ -27,7 +27,7 @@ def start_controller(payload, user_args=None):
                 print(f"Student folder did not exist so it was created: {student_folder_path}")
 
             # Check if an active session exists for this hostname and a different student_id
-            cursor.execute("SELECT * FROM sessions WHERE hostname = %s AND student_id != %s", (hostname, student_id))
+            cursor.execute("SELECT * FROM sessions WHERE hostname = %s AND student_id != %s ORDER BY time DESC LIMIT 1", (hostname, student_id))
             active_session = cursor.fetchone()
 
             if active_session:
@@ -51,7 +51,6 @@ def start_controller(payload, user_args=None):
             
             # Insert or update the session for this hostname and student_id
             cursor.execute("REPLACE INTO sessions (hostname, student_id) VALUES (%s, %s)", (hostname, student_id))
-            conn.commit()
             print(f"Session started for student {student_id} on hostname {hostname}.")
             
             return {
