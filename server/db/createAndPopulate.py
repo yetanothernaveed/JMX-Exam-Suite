@@ -48,6 +48,15 @@ def populate_database(connection, section, database_name):
                 FOREIGN KEY (student_id) REFERENCES students(id)
             )
         """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sessions (
+                hostname VARCHAR(255),
+                student_id VARCHAR(15),
+                time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (hostname, student_id),
+                FOREIGN KEY (student_id) REFERENCES students(id)
+            )
+        """)
 
         data = student_list.StudentDataSingleton.get_student_list(section=section)
 

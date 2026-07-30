@@ -272,7 +272,7 @@ namespace command_handler {
         }
 
         std::string response_msg = std::format(
-            "Solution submitted sucessfully for Question ID {}\n. Server response:\n"
+            "Solution submitted sucessfully for Question ID {}.\n Server response:\n"
             "Verdict: {}\n"
             "Score: {}\n"
             "Details: {}\n",
