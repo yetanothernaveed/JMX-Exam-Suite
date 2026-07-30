@@ -9,7 +9,39 @@
 #include <climits>
 
 namespace command_handler {
-    inline std::string handleHello() {
+    inline std::string handleHello(const nlohmann::json& request) {
+        const nlohmann::json& payload = request.value("payload", nlohmann::json::object());
+
+        if (payload.value("server", false)) {
+            int serverFd = server::connectToServer();
+
+            if (serverFd < 0) {
+                return 
+                    "ERROR: Failed to connect to server.\n"
+                    "The server may not be running or is unreachable.\n" 
+                    "Contact administrator.\n";
+            }
+
+            // Send a simple ping message to the server
+            jmx::sendMessage(serverFd, request.dump());
+
+
+            std::string response {};
+            nlohmann::json responseJson;
+
+            if (!jmx::recvMessage(serverFd, response)) {
+                return "ERROR: failed to receive response from server"; 
+            } else {
+                responseJson = nlohmann::json::parse(response);
+
+                if (responseJson["status"] == "ERROR") {
+                    return std::string("ERROR: ") + responseJson["message"].get<std::string>();
+                }
+            }
+
+            return responseJson["message"].get<std::string>();
+        }
+        
         return "Hi!";
     }
 

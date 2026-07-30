@@ -43,7 +43,7 @@ namespace {
         std::string command = request.value("action", "");
         
         if (command == "hello") {
-            return command_handler::handleHello();
+            return command_handler::handleHello(request);
         } else if (command == "start") {
             return command_handler::handleStart(request);
         } else if (command == "end") {
