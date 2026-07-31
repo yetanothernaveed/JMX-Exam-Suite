@@ -36,7 +36,7 @@ def start_server(host='0.0.0.0', port=8080, user_args=None, DB_CONN_POOL=None):
         server_socket.close()
 
 if __name__ == "__main__":
-    from utils import args, folderStructure
+    from utils import folderStructure
     from db.connectToDB import connect_to_mysql_database
     
     # user_args = args.take_args()

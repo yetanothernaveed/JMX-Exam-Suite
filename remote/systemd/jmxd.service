@@ -28,7 +28,6 @@ Group=jmx
 # what jmxd touches).
 NoNewPrivileges=true
 ProtectSystem=strict
-ProtectHome=true
 PrivateTmp=true
 
 [Install]
