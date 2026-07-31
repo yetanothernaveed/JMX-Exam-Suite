@@ -1,0 +1,29 @@
+name: "jmxremote"
+arch: "amd64"
+platform: "linux"
+version: "${VERSION}"
+section: "default"
+priority: "optional"
+maintainer: "Sayeedur Rahman (yetanothernaveed)"
+description: "JMX CLI and JMX Daemon package"
+vendor: "yetanothernaveed"
+homepage: "https://github.com/yetanothernaveed"
+license: "MIT"
+
+contents:
+  - src: ./dist/bin/jmx
+    dst: /usr/bin/jmx
+    file_info:
+      mode: 0755
+  - src: ./dist/bin/jmxd
+    dst: /usr/bin/jmxd
+    file_info:
+      mode: 0755
+  - src: ./systemd/jmxd.service
+    dst: /lib/systemd/system/jmxd.service
+    file_info:
+      mode: 0744
+
+scripts:
+  postinstall: ./scripts/postinstall.sh
+  preremove: ./scripts/preremove.sh

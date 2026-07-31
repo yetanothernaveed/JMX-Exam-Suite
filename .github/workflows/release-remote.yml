@@ -1,0 +1,84 @@
+name: Release JMX Remote Component
+
+on:
+  push:
+    tags:
+      - 'jmxremote-*-v*'  # Format: jmxremote-<codename>-v<version> (e.g., jmxremote-versioncodename-v26.08.1)
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    
+    # Set default working directory to the component subfolder
+    defaults:
+      run:
+        working-directory: ./remote
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies & nFPM
+        run: |
+          echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | sudo tee /etc/apt/sources.list.d/goreleaser.list
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential nfpm
+
+      - name: Extract Clean Version
+        id: version
+        run: |
+          # Strip 'jmxremote-v' prefix to get pure version (e.g., jmxremote-versioncodename-v26.08.1)]
+          RAW_TAG="${{ github.ref_name }}"
+          CLEAN_VER=$(echo "$RAW_TAG" | sed -E 's/^jmxremote-.+-v([0-9]+(\.[0-9]+)*)$/\1/')
+          echo "VERSION=$CLEAN_VER" >> "$GITHUB_ENV"
+          echo "TAG_NAME=$RAW_TAG" >> "$GITHUB_ENV"
+
+      # 1. Build and stage binaries into jmx/dist/bin/
+      - name: Build & Stage Binaries via CMake
+        run: |
+          cmake --workflow --preset ci-install
+
+      # 2. Package into tarball
+      - name: Create Tarball Package
+        run: |
+          PACKAGE_NAME="jmxremote-${VERSION}-linux-amd64"
+          mkdir -p package/${PACKAGE_NAME}/bin
+          mkdir -p package/${PACKAGE_NAME}/systemd
+          
+          cp dist/bin/jmx package/${PACKAGE_NAME}/bin/
+          cp dist/bin/jmxd package/${PACKAGE_NAME}/bin/
+          cp systemd/jmxd.service package/${PACKAGE_NAME}/systemd/
+          cp scripts/install.sh package/${PACKAGE_NAME}/
+          
+          cd package
+          tar -czvf ${PACKAGE_NAME}.tar.gz ${PACKAGE_NAME}
+          mv *.tar.gz ../dist/
+
+      # 3. Package into .deb and .rpm
+      - name: Build .deb and .rpm Packages
+        run: |
+          VERSION=${VERSION} nfpm package --config nfpm.yaml --target dist/jmx_${VERSION}_amd64.deb
+          VERSION=${VERSION} nfpm package --config nfpm.yaml --target dist/jmx_${VERSION}_amd64.rpm
+
+      # 4. Generate Checksums
+      - name: Generate Checksums
+        run: |
+          cd dist
+          sha256sum *.tar.gz *.deb *.rpm > SHA256SUMS
+
+      # 5. Create GitHub Release
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            jmx/dist/*.tar.gz
+            jmx/dist/*.deb
+            jmx/dist/*.rpm
+            jmx/dist/SHA256SUMS
+          tag_name: ${{ env.TAG_NAME }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
