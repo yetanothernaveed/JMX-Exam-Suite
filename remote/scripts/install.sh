@@ -7,16 +7,16 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
-echo "==> Installing my-cli and my-daemon..."
+echo "==> Installing jmx and jmxd..."
 
 # 1. Install binaries
 install -m 0755 bin/jmx /usr/local/bin/jmx
 install -m 0755 bin/jmxd /usr/local/bin/jmxd
 
-# 2. Install systemd service
+# 2. Install systemd service (Mode 0644)
 if [ -d /etc/systemd/system ]; then
   echo "==> Installing systemd service..."
-  install -m 0744 systemd/jmxd.service /etc/systemd/system/jmxd.service
+  install -m 0644 systemd/jmxd.service /etc/systemd/system/jmxd.service
   
   # 3. Reload systemd and enable service
   systemctl daemon-reload
@@ -29,4 +29,4 @@ else
   echo "W: systemd not detected. Service file not installed."
 fi
 
-echo "==> Installation complete! Run 'my-cli --help' to get started."
+echo "==> Installation complete! Run 'jmx --help' to get started."

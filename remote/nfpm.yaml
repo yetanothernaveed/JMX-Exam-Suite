@@ -22,7 +22,7 @@ contents:
   - src: ./systemd/jmxd.service
     dst: /lib/systemd/system/jmxd.service
     file_info:
-      mode: 0744
+      mode: 0644
 
 scripts:
   postinstall: ./scripts/postinstall.sh
