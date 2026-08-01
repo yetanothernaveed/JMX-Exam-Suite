@@ -5,11 +5,22 @@
 #include <string>
 
 struct DaemonSettings {
+    static constexpr const char* DEFAULT_CONFIG_PATH = "/etc/jmxd/jmxd.conf";
     std::string socket_directory = "/run/jmx";
     std::string workspace_directory = "/home/naveed/exam_workspace"; // Update this for production
     std::string server_address = "127.0.0.1";
     std::string server_port = "8080";
     std::string session_duration_in_hours = "2";
+
+    // 2. Default constructor automatically loads from the fixed path
+    DaemonSettings() {
+        load_from_system(DEFAULT_CONFIG_PATH);
+    }
+
+    // Optional: Overload in case you ever want to override the path during testing
+    explicit DaemonSettings(const std::string& path) {
+        load_from_system(path);
+    }
 
 
     void load_from_system(const std::string& path) {
