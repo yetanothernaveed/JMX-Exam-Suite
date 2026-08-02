@@ -1,15 +1,14 @@
 #!/bin/bash
 set -e
 
-echo ">>> [0.1/8] Load custom branding..."
-# Load helper functions
+echo ">>> [1] Load custom branding..."
 source branding/branding.sh
 
-echo ">>> [1/8] Installing system dependencies..."
+echo ">>> [2] Installing system dependencies..."
 sudo apt update
 sudo apt install -y build-essential python3 openjdk-21-jdk openbox firejail sqlite3 libsqlite3-dev
 
-echo ">>> [2/8] Installing VS Code..."
+echo ">>> [3] Installing VS Code..."
 sudo apt-get install -y wget gpg
 wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > packages.microsoft.gpg
 sudo install -D -o root -g root -m 644 packages.microsoft.gpg /etc/apt/keyrings/packages.microsoft.gpg
@@ -17,24 +16,23 @@ sudo sh -c 'echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/packag
 rm -f packages.microsoft.gpg
 sudo apt update && sudo apt install -y code
 
-echo ">>> [3/8] Creating examkiosk user and workspace..."
+echo ">>> [4] Creating examkiosk user and workspace..."
 if ! id examkiosk &>/dev/null; then
     adduser --disabled-password --gecos "" examkiosk
 fi
 
 EXAMKIOSK_PASSWORD="2304"
-# Set the default password
 echo "examkiosk:${EXAMKIOSK_PASSWORD}" | chpasswd
 
 mkdir -p /home/examkiosk/exam_workspace
 chown examkiosk:examkiosk /home/examkiosk/exam_workspace
 chmod 700 /home/examkiosk/exam_workspace
 
-echo ">>> [3.1/8] Creating new user group jmx and adding user examkiosk to the jmx group"
+echo ">>> [5] Creating new user group jmx and adding user examkiosk to the jmx group"
 getent group jmx >/dev/null || groupadd --system jmx
 sudo usermod -aG jmx examkiosk
 
-echo ">>> [4/8] Setting up VS Code config directories and installing extensions..."
+echo ">>> [6] Setting up VS Code config directories and installing extensions..."
 sudo mkdir -p /home/examkiosk/.config/Code/User
 sudo mkdir -p /home/examkiosk/.vscode
 sudo chown -R examkiosk:examkiosk /home/examkiosk/.vscode
@@ -47,7 +45,7 @@ sudo -u examkiosk code --install-extension vscjava.vscode-java-pack
 sudo -u examkiosk code --install-extension ms-python.python
 sudo -u examkiosk code --install-extension ms-vscode.cpptools
 
-echo ">>> [5/8] Writing VS Code settings and keybindings..."
+echo ">>> [7] Writing VS Code settings and keybindings..."
 
 # 1. Write settings.json (Added UI lockdown settings and fixed missing comma)
 cat << 'EOF' > /tmp/vscode-settings.json
@@ -104,7 +102,7 @@ EOF
 sudo mv /tmp/vscode-keybindings.json /home/examkiosk/.config/Code/User/keybindings.json
 
 
-echo ">>> [6/8] Writing exam session launch script..."
+echo ">>> [8] Writing exam session launch script..."
 TMP_SCRIPT="/tmp/exam-session.sh"
 DEST="/usr/local/bin/exam-session.sh"
 
@@ -134,7 +132,7 @@ EOF
 sudo mv "$TMP_SCRIPT" "$DEST"
 sudo chmod +x /usr/local/bin/exam-session.sh
 
-echo ">>> [7/8] Registering exam session with display manager and installing Openbox config..."
+echo ">>> [9] Registering exam session with display manager and installing Openbox config..."
 TMP_DESKTOP="/tmp/exam.desktop"
 DEST_DESKTOP="/usr/share/xsessions/exam.desktop"
 
@@ -151,13 +149,12 @@ sudo mv "$TMP_DESKTOP" "$DEST_DESKTOP"
 sudo mkdir -p /home/examkiosk/.config/openbox
 sudo cp rc.xml /home/examkiosk/.config/openbox/
 
+sudo chown -R examkiosk:examkiosk /home/examkiosk/.config/openbox
 
-echo ">>> [7.5/8] Setting up restricted terminal..."
-
-# 1. Create the whitelist directory for commands
+echo ">>> [10] Setting up restricted terminal..."
 sudo mkdir -p /home/examkiosk/restricted_bin
 
-# 2. Symlink ONLY the allowed commands
+# Symlink ONLY the allowed commands
 # You can add or remove commands from this array as needed
 ALLOWED_COMMANDS=("ls" "clear" "java" "javac" "python3" "gcc" "g++")
 
@@ -168,7 +165,7 @@ for cmd in "${ALLOWED_COMMANDS[@]}"; do
     fi
 done
 
-# 3. Create the restricted bashrc initialization file
+# Create the restricted bashrc initialization file
 cat << 'EOF' > /tmp/.restricted_bashrc
 # Set a clean, standard terminal prompt
 export PS1='examkiosk@kiosk:\W\$ '
@@ -187,7 +184,7 @@ sudo chown -R root:root /home/examkiosk/restricted_bin
 # Force the operating system to default this user to restricted bash
 sudo usermod -s /bin/rbash examkiosk
 
-echo ">>> [7.1/8] Locking down permissions..."
+echo ">>> [11] Locking down permissions..."
 # Run VS Code once (headless) to ensure extension file structure is initialised
 sudo -u examkiosk code --list-extensions
 
@@ -201,34 +198,59 @@ sudo chmod 644 /home/examkiosk/.config/Code/User/keybindings.json
 sudo chown -R root:root /home/examkiosk/.vscode/extensions
 sudo chmod 755 /home/examkiosk/.vscode/extensions
 
-# FIX: Ensure examkiosk owns its extensions so Java can unpack its server and write logs
-# sudo chown -R examkiosk:examkiosk /home/examkiosk/.vscode
-# sudo chmod -R 755 /home/examkiosk/.vscode
-
 # Disabled for testing stage. Enable before final setup
 # echo ">>> [Extra] Deleting all other desktop environments"
 # sudo find /usr/share/xsessions/ -name "*.desktop" ! -name "exam.desktop" -delete
 
-echo ">>> [7.2/8] Setting up JMX daemon config files"
+echo ">>> [12] Configuring launch script for autologin"
+# Ensure the desktop file has perfect permissions (sometimes moving from /tmp restricts this)
+sudo chmod 644 /usr/share/xsessions/exam.desktop
+
+# Create the .xsessionrc hijack for the examkiosk user
+cat << 'EOF' > /tmp/.xsessionrc
+# This forcefully hijacks any session SDDM tries to load and routes it to the kiosk
+exec /usr/local/bin/exam-session.sh
+EOF
+
+# Move it and set the correct permissions
+sudo mv /tmp/.xsessionrc /home/examkiosk/.xsessionrc
+sudo chown examkiosk:examkiosk /home/examkiosk/.xsessionrc
+sudo chmod 644 /home/examkiosk/.xsessionrc
+
+echo ">>> [13] Setting up JMX daemon config files"
 sudo mkdir -p /etc/jmxd 
 
-echo ">>> [7.3/8] Creating autologin configuration for examkiosk user..."
-mkdir -p /etc/sddm.conf.d
-cat > /etc/sddm.conf.d/autologin.conf <<EOF
+echo ">>> [14] Creating autologin configuration for examkiosk user..."
+
+# Wipe out any default Lubuntu autologin configs that might conflict
+sudo rm -f /etc/sddm.conf
+sudo rm -f /etc/sddm.conf.d/*.conf
+sudo mkdir -p /etc/sddm.conf.d
+
+# Write our definitive config WITH the Theme block restored
+sudo tee /etc/sddm.conf.d/10-exam-autologin.conf > /dev/null <<EOF
 [Autologin]
 User=examkiosk
 Session=exam
 Relogin=false
 
 [General]
-DefaultSession=exam.desktop
+DefaultSession=exam
 
-[Users]
-RememberLastUser=false
-RememberLastSession=false
+[Theme]
+Current=lubuntu
 EOF
 
-echo ">>> [7.4/8] Installing login background..."
+# Force AccountsService to recognize the session
+sudo mkdir -p /var/lib/AccountsService/users/
+cat << 'EOF' | sudo tee /var/lib/AccountsService/users/examkiosk > /dev/null
+[User]
+Session=exam
+XSession=exam
+SystemAccount=false
+EOF
+
+echo ">>> [15] Installing login background..."
 install_plymouth_branding
 install_login_background
 

@@ -4,10 +4,33 @@
 # Branding functions
 ################################################################################
 
+# install_login_background() {
+#     local SOURCE="branding/Wall.png"
+#     local WALLPAPER_DIR="/usr/share/lubuntu/wallpapers"
+#     local LINK_NAME="/usr/share/sddm/themes/ubuntu-theme/wall.png"
+
+#     if [[ ! -f "$SOURCE" ]]; then
+#         echo "ERROR: $SOURCE not found."
+#         return 1
+#     fi
+
+#     echo "Installing login background..."
+
+#     install -m 644 -o root -g root \
+#         "$SOURCE" \
+#         "$WALLPAPER_DIR/Wall.png"
+
+#     ln -sfn \
+#         "$WALLPAPER_DIR/Wall.png" \
+#         "$LINK_NAME"
+
+#     echo "✓ Login background installed."
+# }
+
 install_login_background() {
     local SOURCE="branding/Wall.png"
-    local WALLPAPER_DIR="/usr/share/lubuntu/wallpapers"
-    local LINK_NAME="/usr/share/sddm/themes/ubuntu-theme/wall.png"
+    local DEST="/usr/share/lubuntu/wallpapers/exam-wallpaper.png"
+    local LUBUNTU_THEME_CONF="/usr/share/sddm/themes/lubuntu/theme.conf"
 
     if [[ ! -f "$SOURCE" ]]; then
         echo "ERROR: $SOURCE not found."
@@ -16,13 +39,20 @@ install_login_background() {
 
     echo "Installing login background..."
 
-    install -m 644 -o root -g root \
-        "$SOURCE" \
-        "$WALLPAPER_DIR/Wall.png"
+    # 1. Copy the image to a global location accessible by SDDM
+    sudo install -m 644 -o root -g root "$SOURCE" "$DEST"
 
-    ln -sfn \
-        "$WALLPAPER_DIR/Wall.png" \
-        "$LINK_NAME"
+    # 2. Update the Lubuntu SDDM theme to point directly to our new image
+    if [[ -f "$LUBUNTU_THEME_CONF" ]]; then
+        sudo sed -i 's|^background=.*|background='"$DEST"'|' "$LUBUNTU_THEME_CONF"
+    else
+        echo "WARNING: Lubuntu theme config not found at $LUBUNTU_THEME_CONF"
+        # Fallback to standard ubuntu-theme if lubuntu isn't present
+        local FALLBACK_CONF="/usr/share/sddm/themes/ubuntu-theme/theme.conf"
+        if [[ -f "$FALLBACK_CONF" ]]; then
+            sudo sed -i 's|^background=.*|background='"$DEST"'|' "$FALLBACK_CONF"
+        fi
+    fi
 
     echo "✓ Login background installed."
 }

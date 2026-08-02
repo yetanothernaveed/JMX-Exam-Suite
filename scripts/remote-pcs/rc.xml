@@ -615,6 +615,8 @@
 
   <application class="Code">
     <maximized>true</maximized>
+    <fullscreen>yes</fullscreen>
+    <decor>no</decor>
   </application>
 
 </applications>
