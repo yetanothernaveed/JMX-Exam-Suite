@@ -70,15 +70,17 @@ cat << 'EOF' > /tmp/vscode-settings.json
     "github.copilot.editor.enableCodeActions": false,
     "github.copilot.nextEditSuggestions.enabled": false,
     "editor.inlineSuggestions.edits.allowCodeShifting": "never",
+    
+    "terminal.integrated.shellIntegration.enabled": false,
     "terminal.integrated.defaultProfile.linux": "RestrictedBash",
     "terminal.integrated.automationProfile.linux": {
         "path": "/bin/bash",
-        "args": ["--restricted", "--rcfile", "/home/examkiosk/.restricted_bashrc"]
+        "args": ["--noprofile", "--restricted", "--rcfile", "/home/examkiosk/.restricted_bashrc"]
     },
     "terminal.integrated.profiles.linux": {
         "RestrictedBash": {
             "path": "/bin/bash",
-            "args": ["--restricted", "--rcfile", "/home/examkiosk/.restricted_bashrc"]
+            "args": ["--noprofile", "--restricted", "--rcfile", "/home/examkiosk/.restricted_bashrc"]
         },
         "bash": null,
         "sh": null,
@@ -120,6 +122,8 @@ firejail --net=none \
   --whitelist=/home/examkiosk/.vscode/extensions \
   --whitelist=/home/examkiosk/.config/Code \
   --whitelist=/home/examkiosk/.bashrc \
+  --whitelist=/home/examkiosk/.restricted_bashrc \
+  --whitelist=/home/examkiosk/restricted_bin \
   --whitelist=/run/jmx \
   --ignore=nogroups \
   code --kiosk --wait /home/examkiosk/exam_workspace
