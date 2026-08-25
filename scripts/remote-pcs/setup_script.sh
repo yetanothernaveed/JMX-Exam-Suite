@@ -160,7 +160,7 @@ sudo mkdir -p /home/examkiosk/restricted_bin
 
 # Symlink ONLY the allowed commands
 # You can add or remove commands from this array as needed
-ALLOWED_COMMANDS=("ls" "clear" "java" "javac" "python3" "gcc" "g++")
+ALLOWED_COMMANDS=("ls" "jmx" "clear" "java" "javac" "python3" "gcc" "g++")
 
 for cmd in "${ALLOWED_COMMANDS[@]}"; do
     CMD_PATH=$(which $cmd 2>/dev/null)
