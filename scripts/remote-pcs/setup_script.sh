@@ -33,6 +33,8 @@ getent group jmx >/dev/null || groupadd --system jmx
 sudo usermod -aG jmx examkiosk
 
 echo ">>> [6] Setting up VS Code config directories and installing extensions..."
+sudo chattr -i /home/examkiosk/.config/Code/User/settings.json /home/examkiosk/.config/Code/User/keybindings.json
+
 sudo mkdir -p /home/examkiosk/.config/Code/User
 sudo mkdir -p /home/examkiosk/.vscode
 sudo chown -R examkiosk:examkiosk /home/examkiosk/.vscode
@@ -71,6 +73,10 @@ cat << 'EOF' > /tmp/vscode-settings.json
     "github.copilot.nextEditSuggestions.enabled": false,
     "editor.inlineSuggestions.edits.allowCodeShifting": "never",
     
+    "workbench.startupEditor": "none",
+    "workbench.welcomePage.configured": true,
+    "workbench.enableExperiments": false,
+
     "terminal.integrated.shellIntegration.enabled": false,
     "terminal.integrated.defaultProfile.linux": "RestrictedBash",
     "terminal.integrated.automationProfile.linux": {
@@ -189,18 +195,22 @@ sudo chown -R root:root /home/examkiosk/restricted_bin
 sudo usermod -s /bin/rbash examkiosk
 
 echo ">>> [11] Locking down permissions..."
-# Run VS Code once (headless) to ensure extension file structure is initialised
-sudo -u examkiosk code --list-extensions
+# 1. Clear stuck session backups causing the unsaved changes prompt
+sudo rm -rf /home/examkiosk/.config/Code/User/Backups/*
 
-# Lock down config files - read-only for examkiosk, owned by root
+# 2. Grant examkiosk ownership of the User directory so code Auto-Save functions
+sudo chown -R examkiosk:examkiosk /home/examkiosk/.config/Code/User
+sudo chmod 755 /home/examkiosk/.config/Code/User
+
+# 3. Assign root ownership to the settings files
 sudo chown root:root /home/examkiosk/.config/Code/User/settings.json
-sudo chmod 644 /home/examkiosk/.config/Code/User/settings.json
-
 sudo chown root:root /home/examkiosk/.config/Code/User/keybindings.json
+sudo chmod 644 /home/examkiosk/.config/Code/User/settings.json
 sudo chmod 644 /home/examkiosk/.config/Code/User/keybindings.json
 
-sudo chown -R root:root /home/examkiosk/.vscode/extensions
-sudo chmod 755 /home/examkiosk/.vscode/extensions
+# 4. Lock settings files with the immutable attribute (prevents atomic save file replacement)
+sudo chattr +i /home/examkiosk/.config/Code/User/settings.json
+sudo chattr +i /home/examkiosk/.config/Code/User/keybindings.json
 
 # Disabled for testing stage. Enable before final setup
 # echo ">>> [Extra] Deleting all other desktop environments"
