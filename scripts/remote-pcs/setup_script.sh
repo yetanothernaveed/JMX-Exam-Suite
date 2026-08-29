@@ -33,7 +33,12 @@ getent group jmx >/dev/null || groupadd --system jmx
 sudo usermod -aG jmx examkiosk
 
 echo ">>> [6] Setting up VS Code config directories and installing extensions..."
-sudo chattr -i /home/examkiosk/.config/Code/User/settings.json /home/examkiosk/.config/Code/User/keybindings.json
+if [ -f /home/examkiosk/.config/Code/User/settings.json ]; then
+    sudo chattr -i /home/examkiosk/.config/Code/User/settings.json
+fi
+if [ -f /home/examkiosk/.config/Code/User/keybindings.json ]; then
+    sudo chattr -i /home/examkiosk/.config/Code/User/keybindings.json
+fi
 
 sudo mkdir -p /home/examkiosk/.config/Code/User
 sudo mkdir -p /home/examkiosk/.vscode
