@@ -156,3 +156,26 @@ profile:
 - If you outgrow the single-threaded accept loop (slow commands
   blocking others), hand each accepted `fd` off to a thread or a
   `fork()`'d child instead of processing inline.
+
+
+# JMXCleanerd
+Build from source using the command below:
+```
+g++ -std=c++20 -O2 -o /usr/local/bin/jmxcleanerd jmxcleanerd.cpp
+```
+
+Send the jmxcleanerd.service and jmxcleanerd.timer file to /etc/systemd/system/ and run the following commands to enable and start the service:
+```
+sudo systemctl daemon-reload
+sudo systemctl enable --now jmxcleanerd.timer
+```
+
+To verify scheduling, run the following command:
+```
+systemctl list-timers jmxcleanerd.timer
+```
+
+To test immediately, run the following command:
+```
+sudo systemctl start jmxcleanerd.service
+```

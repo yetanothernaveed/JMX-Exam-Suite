@@ -1,0 +1,7 @@
+[Unit]
+Description=Delete exam_workspace files and session older than current slot cutoff
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/jmxcleanerd
