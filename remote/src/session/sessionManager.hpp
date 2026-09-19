@@ -149,6 +149,8 @@ class SessionManager {
         }
 
         // For cleanup thread
+        // DEADCODE: Could be repurposed for a cleanup thread that removes expired sessions.
+        // Remove after final resign decision.
         bool check_and_cleanup(std::string& error) {
             std::lock_guard<std::mutex> lock(session_mutex);
 
