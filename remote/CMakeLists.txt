@@ -11,4 +11,7 @@ target_include_directories(jmxd PRIVATE src)
 add_executable(jmx src/jmx.cpp)
 target_include_directories(jmx PRIVATE src)
 
-install(TARGETS jmxd jmx RUNTIME DESTINATION bin)
+add_executable(jmxcleanerd src/jmxcleanerd.cpp)
+target_include_directories(jmx PRIVATE src)
+
+install(TARGETS jmxcleanerd jmxd jmx RUNTIME DESTINATION bin)
