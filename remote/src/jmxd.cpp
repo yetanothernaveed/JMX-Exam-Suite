@@ -60,28 +60,28 @@ namespace {
     }
 
     // Thread control mechanisms
-    std::condition_variable cleanup_cv;
-    std::mutex cleanup_cv_mtx;
-    std::atomic<bool> stop_cleanup_thread(false);
+    // std::condition_variable cleanup_cv;
+    // std::mutex cleanup_cv_mtx;
+    // std::atomic<bool> stop_cleanup_thread(false);
 
-    void session_cleanup_worker(SessionManager& manager, std::chrono::minutes check_interval) {
-        while (!stop_cleanup_thread) {
-            std::unique_lock<std::mutex> lock(cleanup_cv_mtx);
+    // void session_cleanup_worker(SessionManager& manager, std::chrono::minutes check_interval) {
+    //     while (!stop_cleanup_thread) {
+    //         std::unique_lock<std::mutex> lock(cleanup_cv_mtx);
             
-            if (cleanup_cv.wait_for(lock, check_interval, [] { return stop_cleanup_thread.load(); })) {
-                break; 
-            }
+    //         if (cleanup_cv.wait_for(lock, check_interval, [] { return stop_cleanup_thread.load(); })) {
+    //             break; 
+    //         }
 
-            std::string error {};
-            if (manager.check_and_cleanup(error)) {
-                syslog(LOG_INFO, "[Session Cleanup] Expired session tracking data successfully wiped.");
-            } else if (!error.empty()) {
-                syslog(LOG_ERR, "[Session Cleanup Error] %s", error.c_str());
-            }
+    //         std::string error {};
+    //         if (manager.check_and_cleanup(error)) {
+    //             syslog(LOG_INFO, "[Session Cleanup] Expired session tracking data successfully wiped.");
+    //         } else if (!error.empty()) {
+    //             syslog(LOG_ERR, "[Session Cleanup Error] %s", error.c_str());
+    //         }
 
             
-        }
-    }
+    //     }
+    // }
 
 }
 
@@ -113,9 +113,9 @@ int main() {
     }
 
     // Cleanup thread
-    SessionManager session_manager;
-    std::chrono::minutes run_interval(5);
-    std::thread cleanup_thread(session_cleanup_worker, std::ref(session_manager), run_interval);
+    // SessionManager session_manager;
+    // std::chrono::minutes run_interval(5);
+    // std::thread cleanup_thread(session_cleanup_worker, std::ref(session_manager), run_interval);
 
 
     // Single-threaded accept loop: simple and sufficient for a small
@@ -153,11 +153,11 @@ int main() {
     syslog(LOG_INFO, "shutting down");
     close(listenFd);
     unlink(jmx::kSocketPath);
-    stop_cleanup_thread = true;
-    cleanup_cv.notify_all();
-    if (cleanup_thread.joinable()) {
-        cleanup_thread.join();
-    }
+    // stop_cleanup_thread = true;
+    // cleanup_cv.notify_all();
+    // if (cleanup_thread.joinable()) {
+    //     cleanup_thread.join();
+    // }
     closelog();
     return 0;
 }
