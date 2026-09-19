@@ -3,5 +3,13 @@ Description=Delete exam_workspace files and session older than current slot cuto
 After=local-fs.target
 
 [Service]
+# Automatically creates /var/tmp/jmxcleanerd/ with 0700 permissions owned by root
+RuntimeDirectoryMode=0700
+ConfigurationDirectoryMode=0700
+StateDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
+
+LogsDirectory=jmxcleanerd
+
 Type=oneshot
 ExecStart=/usr/local/bin/jmxcleanerd

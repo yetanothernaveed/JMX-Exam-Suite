@@ -10,6 +10,49 @@ namespace fs = std::filesystem;
 
 const fs::path TARGET_PATH = "/home/examkiosk/exam_workspace";
 const fs::path SESSION_FILE_PATH = "/run/jmx/sessions/current_session.txt";
+const fs::path BASE_ARCHIVE_DIR = "/var/tmp/jmxcleanerd";
+
+// Creates the timestamped archive directory with 0700 permissions
+fs::path create_timestamped_archive_dir(std::error_code& ec) {
+    std::time_t now = std::time(nullptr);
+    std::tm nowTm = *std::localtime(&now);
+
+    char timeBuf[32];
+    // Format: DD-MM-YYYY HH:MM:SS
+    std::strftime(timeBuf, sizeof(timeBuf), "%d-%m-%Y %H:%M:%S", &nowTm);
+
+    fs::path archiveSubdir = BASE_ARCHIVE_DIR / timeBuf;
+
+    fs::create_directories(archiveSubdir, ec);
+    if (ec) return {};
+
+    // Apply 0700 (rwx------) permissions matching StateDirectoryMode=0700
+    fs::permissions(archiveSubdir, fs::perms::owner_all, fs::perm_options::replace, ec);
+    if (ec) return {};
+
+    return archiveSubdir;
+}
+
+std::uintmax_t move_to_archive(const fs::path& source, const fs::path& targetDir, std::error_code& ec) {
+    fs::path dest = targetDir / source.filename();
+
+    // Fast atomic move on the same filesystem
+    fs::rename(source, dest, ec);
+    if (!ec) {
+        return 1;
+    }
+
+    // Fallback for cross-filesystem moves
+    ec.clear();
+    fs::copy(source, dest, fs::copy_options::recursive | fs::copy_options::overwrite_existing, ec);
+
+    if (!ec) {
+        return fs::remove_all(source, ec);
+    }
+
+    return 0;
+}
+
 
 // Returns creation time as time_t, or -1 on failure/unsupported
 time_t getCreationTime(const fs::path& path) {
@@ -64,6 +107,7 @@ int main() {
     std::error_code ec;
     std::uintmax_t removedCount = 0;
     int skippedNoTime = 0;
+    fs::path currentArchiveDir;
 
     for (const auto& entry : fs::directory_iterator(TARGET_PATH, ec)) {
         time_t created = getCreationTime(entry.path());
@@ -76,13 +120,23 @@ int main() {
         }
 
         if (created < cutoff) {
-            std::uintmax_t n = fs::remove_all(entry.path(), ec);
+            // Lazily create the timestamped folder once on the first file to be archived
+            if (currentArchiveDir.empty()) {
+                currentArchiveDir = create_timestamped_archive_dir(ec);
+                if (ec) {
+                    std::cerr << "Failed to create timestamped archive directory: " 
+                              << ec.message() << "\n";
+                    break;
+                }
+            }
+
+            std::uintmax_t n = move_to_archive(entry.path(), currentArchiveDir, ec);
             if (ec) {
-                std::cerr << "Failed to remove " << entry.path() << ": " << ec.message() << "\n";
+                std::cerr << "Failed to archive " << entry.path() << ": " << ec.message() << "\n";
                 ec.clear();
             } else {
                 removedCount += n;
-                std::cout << "Removed: " << entry.path() << "\n";
+                std::cout << "Archived: " << entry.path() << " -> " << currentArchiveDir << "\n";
             }
         }
     }
