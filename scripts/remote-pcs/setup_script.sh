@@ -8,6 +8,26 @@ echo ">>> [2] Installing system dependencies..."
 sudo apt update
 sudo apt install -y build-essential python3 openjdk-21-jdk openbox firejail sqlite3 libsqlite3-dev
 
+echo ">>> [2.1] Installing JMX Remote assets"
+REPO="yetanothernaveed/JMX-Exam-Suite"
+ARCH="$(dpkg --print-architecture)"
+
+API="https://api.github.com/repos/$REPO/releases/latest"
+
+DEB_URL=$(curl -fsSL "$API" | jq -r \
+  --arg arch "$ARCH" \
+  '[.assets[] | select(.name | endswith(".deb")) |
+    select(.name | contains($arch))][0].browser_download_url // empty')
+
+if [ -z "$DEB_URL" ]; then
+    echo "No matching .deb package found for $ARCH"
+    exit 1
+fi
+
+curl -fL "$DEB_URL" -o jmx.deb
+sudo apt apt install -y ./jmx.deb
+rm -f jmx.deb
+
 echo ">>> [3] Installing VS Code..."
 sudo apt-get install -y wget gpg
 wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > packages.microsoft.gpg
