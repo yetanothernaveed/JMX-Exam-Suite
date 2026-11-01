@@ -24,7 +24,7 @@ contents:
     file_info:
       mode: 0644
   - src: ./systemd/jmxcleanerd.service
-    dst: /lib/systemd/system/jmxd.service
+    dst: /lib/systemd/system/jmxcleanerd.service
     file_info:
       mode: 0644
   - src: ./systemd/jmxcleanerd.timer
