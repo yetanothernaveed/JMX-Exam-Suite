@@ -25,7 +25,7 @@ if [ -z "$DEB_URL" ]; then
 fi
 
 curl -fL "$DEB_URL" -o jmx.deb
-sudo apt apt install -y ./jmx.deb
+sudo apt install -y ./jmx.deb
 rm -f jmx.deb
 
 echo ">>> [3] Installing VS Code..."
