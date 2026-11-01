@@ -212,62 +212,62 @@ sudo chown root:root /home/examkiosk/.config/Code/User/settings.json
 sudo chown root:root /home/examkiosk/.config/Code/User/keybindings.json
 sudo chmod 644 /home/examkiosk/.config/Code/User/settings.json
 sudo chmod 644 /home/examkiosk/.config/Code/User/keybindings.json
-
+ 
 # 4. Lock settings files with the immutable attribute (prevents atomic save file replacement)
 sudo chattr +i /home/examkiosk/.config/Code/User/settings.json
 sudo chattr +i /home/examkiosk/.config/Code/User/keybindings.json
 
-# Disabled for testing stage. Enable before final setup
-# echo ">>> [Extra] Deleting all other desktop environments"
-# sudo find /usr/share/xsessions/ -name "*.desktop" ! -name "exam.desktop" -delete
+# ################################################################################# Disable for testing stage. Enable before final setup #################################################################################
+echo ">>> [Extra] Deleting all other desktop environments"
+sudo find /usr/share/xsessions/ -name "*.desktop" ! -name "exam.desktop" -delete
 
-echo ">>> [12] Configuring launch script for autologin"
+echo ">>> [12] Configuring launch script for autologin (Disabled)"
 # Ensure the desktop file has perfect permissions (sometimes moving from /tmp restricts this)
-sudo chmod 644 /usr/share/xsessions/exam.desktop
+# sudo chmod 644 /usr/share/xsessions/exam.desktop
 
-# Create the .xsessionrc hijack for the examkiosk user
-cat << 'EOF' > /tmp/.xsessionrc
-# This forcefully hijacks any session SDDM tries to load and routes it to the kiosk
-exec /usr/local/bin/exam-session.sh
-EOF
+# # Create the .xsessionrc hijack for the examkiosk user
+# cat << 'EOF' > /tmp/.xsessionrc
+# # This forcefully hijacks any session SDDM tries to load and routes it to the kiosk
+# exec /usr/local/bin/exam-session.sh
+# EOF
 
-# Move it and set the correct permissions
-sudo mv /tmp/.xsessionrc /home/examkiosk/.xsessionrc
-sudo chown examkiosk:examkiosk /home/examkiosk/.xsessionrc
-sudo chmod 644 /home/examkiosk/.xsessionrc
+# # Move it and set the correct permissions
+# sudo mv /tmp/.xsessionrc /home/examkiosk/.xsessionrc
+# sudo chown examkiosk:examkiosk /home/examkiosk/.xsessionrc
+# sudo chmod 644 /home/examkiosk/.xsessionrc
 
 echo ">>> [13] Setting up JMX daemon config files"
 sudo mkdir -p /etc/jmxd 
 
-echo ">>> [14] Creating autologin configuration for examkiosk user..."
+echo ">>> [14] Creating autologin configuration for examkiosk user... (Disabled)"
 
-# Wipe out any default Lubuntu autologin configs that might conflict
-sudo rm -f /etc/sddm.conf
-sudo rm -f /etc/sddm.conf.d/*.conf
-sudo mkdir -p /etc/sddm.conf.d
+# # Wipe out any default Lubuntu autologin configs that might conflict
+# sudo rm -f /etc/sddm.conf
+# sudo rm -f /etc/sddm.conf.d/*.conf
+# sudo mkdir -p /etc/sddm.conf.d
 
-# Write our definitive config WITH the Theme block restored
-sudo tee /etc/sddm.conf.d/10-exam-autologin.conf > /dev/null <<EOF
-[Autologin]
-User=examkiosk
-Session=exam
-Relogin=false
+# # Write our definitive config WITH the Theme block restored
+# sudo tee /etc/sddm.conf.d/10-exam-autologin.conf > /dev/null <<EOF
+# [Autologin]
+# User=examkiosk
+# Session=exam
+# Relogin=false
 
-[General]
-DefaultSession=exam
+# [General]
+# DefaultSession=exam
 
-[Theme]
-Current=lubuntu
-EOF
+# [Theme]
+# Current=lubuntu
+# EOF
 
-# Force AccountsService to recognize the session
-sudo mkdir -p /var/lib/AccountsService/users/
-cat << 'EOF' | sudo tee /var/lib/AccountsService/users/examkiosk > /dev/null
-[User]
-Session=exam
-XSession=exam
-SystemAccount=false
-EOF
+# # Force AccountsService to recognize the session
+# sudo mkdir -p /var/lib/AccountsService/users/
+# cat << 'EOF' | sudo tee /var/lib/AccountsService/users/examkiosk > /dev/null
+# [User]
+# Session=exam
+# XSession=exam
+# SystemAccount=false
+# EOF
 
 echo ">>> [15] Installing login background..."
 install_plymouth_branding

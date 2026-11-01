@@ -28,7 +28,7 @@
 # }
 
 install_login_background() {
-    local SOURCE="branding/Wall.png"
+    local SOURCE="branding/AustereWall.png"
     local DEST="/usr/share/lubuntu/wallpapers/exam-wallpaper.png"
     local LUBUNTU_THEME_CONF="/usr/share/sddm/themes/lubuntu/theme.conf"
 
@@ -58,7 +58,7 @@ install_login_background() {
 }
 
 install_plymouth_branding() {
-    local SOURCE_IMG="branding/Banner.png"
+    local SOURCE_IMG="branding/AustereWall.png"
     local THEME_NAME="examkiosk"
     local THEME_DIR="/usr/share/plymouth/themes/$THEME_NAME"
 
