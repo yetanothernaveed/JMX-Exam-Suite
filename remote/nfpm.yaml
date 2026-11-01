@@ -12,11 +12,15 @@ license: "MIT"
 
 contents:
   - src: ./dist/bin/jmx
-    dst: /usr/bin/jmx
+    dst: /usr/local/bin/jmx
     file_info:
       mode: 0755
   - src: ./dist/bin/jmxd
-    dst: /usr/bin/jmxd
+    dst: /usr/local/bin/jmxd
+    file_info:
+      mode: 0755
+  - src: ./dist/bin/jmxcleanerd
+    dst: /usr/local/bin/jmxcleanerd
     file_info:
       mode: 0755
   - src: ./systemd/jmxd.service
