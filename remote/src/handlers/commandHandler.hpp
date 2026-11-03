@@ -311,7 +311,7 @@ namespace command_handler {
         std::string filename = request["payload"]["filename"].get<std::string>();
         std::filesystem::path file_path = std::filesystem::path(settings.workspace_directory) / filename;
 
-        if (!std::filesystem::exists(file_path)) {
+        if (!std::filesystem::exists(file_path) || !std::filesystem::is_regular_file(file_path)) {
             return "Error: File does not exist in exam workspace: " + file_path.string();
         }
 
