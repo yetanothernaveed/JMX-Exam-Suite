@@ -23,7 +23,13 @@ from Judge.testcases import (
     load_testcases,
     parse_int_row,
 )
-from Judge.verdicts import Verdict, format_mismatch, score_for_passed
+from Judge.verdicts import (
+    MAX_SCORE,
+    CaseResult,
+    Verdict,
+    format_case_scores,
+    format_mismatch,
+)
 
 
 class _ListJudge(BaseJudge):
@@ -283,6 +289,18 @@ class TestEvaluate(unittest.TestCase):
         self.assertEqual(result["score"], 5.0)
         self.assertIn("Could not parse", result["details"])
 
+    def test_unparseable_cut_off_line_after_a_crash_is_a_runtime_error(self):
+        result = self.judge.evaluate(
+            _run(stdout="1 2\nnot an integer", exit_code=1, stderr="boom"),
+            _expected([[1, 2], [3, 4]]),
+            LIMITS,
+        )
+
+        self.assertEqual(result["verdict"], Verdict.RUNTIME_ERROR)
+        self.assertEqual(result["score"], 5.0)
+        self.assertIn("boom", result["details"])
+        self.assertNotIn("Could not parse", result["details"])
+
     def test_clean_exit_after_exceeding_cpu_limit_is_tle(self):
         result = self.judge.evaluate(
             _run(stdout="1 2\n3 4\n", cpu_time_ms=1_500.0),
@@ -301,6 +319,144 @@ class TestEvaluate(unittest.TestCase):
         )
 
         self.assertEqual(result["verdict"], Verdict.TIME_LIMIT_EXCEEDED)
+        self.assertEqual(result["score"], 5.0)
+
+    def test_partial_output_then_timeout_is_tle_not_wrong_answer(self):
+        result = self.judge.evaluate(
+            _run(
+                stdout="1 2\n3",
+                exit_code=-1,
+                signal="SIGKILL",
+                status="TO",
+                message="Time limit exceeded (wall clock)",
+                cpu_time_ms=1_500.0,
+                wall_time_ms=2_100.0,
+            ),
+            _expected([[1, 2], [3, 4]]),
+            LIMITS,
+        )
+
+        self.assertEqual(result["verdict"], Verdict.TIME_LIMIT_EXCEEDED)
+        self.assertEqual(result["score"], 5.0)
+        self.assertIn("Time limit exceeded", result["details"])
+
+    def test_a_cut_off_line_cannot_be_graded_as_wrong_answer(self):
+        result = self.judge.evaluate(
+            _run(
+                stdout="1 2\n3 4\n5",
+                exit_code=-1,
+                signal="SIGKILL",
+                status="TO",
+                message="Time limit exceeded (cpu)",
+                cpu_time_ms=1_001.0,
+                wall_time_ms=1_200.0,
+            ),
+            _expected([[1, 2], [3, 4], [5, 6]]),
+            LIMITS,
+        )
+
+        self.assertEqual(result["verdict"], Verdict.TIME_LIMIT_EXCEEDED)
+        self.assertAlmostEqual(result["score"], 10.0 * 2 / 3, places=2)
+        self.assertNotIn("WRONG ANSWER", result["details"])
+
+    def test_an_unparseable_cut_off_line_under_timeout_is_tle(self):
+        result = self.judge.evaluate(
+            _run(
+                stdout="1 2\n3 x",
+                exit_code=-1,
+                signal="SIGKILL",
+                status="TO",
+                message="Time limit exceeded (cpu)",
+                cpu_time_ms=1_001.0,
+                wall_time_ms=1_200.0,
+            ),
+            _expected([[1, 2], [3, 4], [5, 6]]),
+            LIMITS,
+        )
+
+        self.assertEqual(result["verdict"], Verdict.TIME_LIMIT_EXCEEDED)
+        self.assertNotIn("Could not parse", result["details"])
+
+    def test_timeout_before_any_output_is_tle(self):
+        result = self.judge.evaluate(
+            _run(
+                stdout="",
+                exit_code=-1,
+                signal="SIGKILL",
+                status="TO",
+                message="Time limit exceeded (wall clock)",
+                wall_time_ms=2_100.0,
+            ),
+            _expected([[1, 2], [3, 4]]),
+            LIMITS,
+        )
+
+        self.assertEqual(result["verdict"], Verdict.TIME_LIMIT_EXCEEDED)
+        self.assertEqual(result["score"], 0.0)
+        self.assertIn("test case 1", result["details"])
+
+    def test_a_wrong_prefix_does_not_override_a_timeout(self):
+        result = self.judge.evaluate(
+            _run(
+                stdout="0 2\n3 4\n",
+                exit_code=-1,
+                signal="SIGKILL",
+                status="TO",
+                message="Time limit exceeded (wall clock)",
+                wall_time_ms=2_100.0,
+            ),
+            _expected([[1, 2], [3, 4], [5, 6]]),
+            LIMITS,
+        )
+
+        self.assertEqual(result["verdict"], Verdict.TIME_LIMIT_EXCEEDED)
+        self.assertEqual(result["score"], 0.0)
+        self.assertIn("TIME LIMIT EXCEEDED", result["details"])
+
+    def test_clean_exit_with_incomplete_output_at_the_limit_is_tle(self):
+        result = self.judge.evaluate(
+            _run(stdout="1 2\n", cpu_time_ms=1_000.0),
+            _expected([[1, 2], [3, 4]]),
+            LIMITS,
+        )
+
+        self.assertEqual(result["verdict"], Verdict.TIME_LIMIT_EXCEEDED)
+        self.assertEqual(result["score"], 5.0)
+
+    def test_piston_timeout_status_is_tle_even_with_all_answers(self):
+        result = self.judge.evaluate(
+            _run(
+                stdout="1 2\n3 4\n",
+                exit_code=-1,
+                signal="SIGKILL",
+                status="TO",
+                message="Time limit exceeded (wall clock)",
+                wall_time_ms=2_100.0,
+            ),
+            _expected([[1, 2], [3, 4]]),
+            LIMITS,
+        )
+
+        self.assertEqual(result["verdict"], Verdict.TIME_LIMIT_EXCEEDED)
+        self.assertEqual(result["score"], 0.0)
+        self.assertIn("discarded", result["details"])
+
+    def test_exit_137_with_empty_signal_at_the_memory_limit_is_mle(self):
+        result = self.judge.evaluate(
+            _run(
+                stdout="1 2\n",
+                exit_code=137,
+                signal="",
+                status="RE",
+                message="Exited with error status 137",
+                memory_bytes=100 * 10**6,
+                stderr="/piston/packages/java/run: line 7: 4 Killed java $filename \"$@\"\n",
+            ),
+            _expected([[1, 2], [3, 4]]),
+            LIMITS,
+        )
+
+        self.assertEqual(result["verdict"], Verdict.MEMORY_LIMIT_EXCEEDED)
         self.assertEqual(result["score"], 5.0)
 
     def test_killed_process_at_memory_limit_is_mle(self):
@@ -352,13 +508,167 @@ class TestEvaluate(unittest.TestCase):
         self.assertEqual(result["verdict"], Verdict.WRONG_ANSWER)
         self.assertEqual(result["score"], 0.0)
 
+    def test_custom_case_scores_are_used_for_partial_credit(self):
+        self.judge.case_scores = [1.5, 2.5, 6.0]
+
+        result = self.judge.evaluate(
+            _run(stdout="1 2\n3 4\n5 7\n"),
+            _expected([[1, 2], [3, 4], [5, 6]]),
+            LIMITS,
+        )
+
+        self.assertEqual(result["verdict"], Verdict.WRONG_ANSWER)
+        self.assertEqual(result["score"], 4.0)
+        self.assertIn("1.50 / 1.50", result["details"])
+        self.assertIn("2.50 / 2.50", result["details"])
+        self.assertIn("0.00 / 6.00", result["details"])
+        self.assertIn("WRONG ANSWER", result["details"])
+
+    def test_first_wrong_answer_marks_later_cases_as_not_scored(self):
+        self.judge.case_scores = [2.0, 3.0, 5.0]
+
+        result = self.judge.evaluate(
+            _run(stdout="0 2\n3 4\n5 6\n"),
+            _expected([[1, 2], [3, 4], [5, 6]]),
+            LIMITS,
+        )
+
+        self.assertEqual(result["verdict"], Verdict.WRONG_ANSWER)
+        self.assertEqual(result["score"], 0.0)
+        self.assertIn("0.00 / 2.00", result["details"])
+        self.assertIn("2-3", result["details"])
+        self.assertIn("NOT SCORED", result["details"])
+        self.assertNotIn("3.00 / 5.00", result["details"])
+
+    def test_time_limit_before_all_cases_scores_only_the_passing_prefix(self):
+        self.judge.case_scores = [1.0, 2.0, 3.0, 4.0]
+
+        result = self.judge.evaluate(
+            _run(stdout="1 2\n3 4\n", exit_code=-9, signal="SIGKILL"),
+            _expected([[1, 2], [3, 4], [5, 6], [7, 8]]),
+            LIMITS,
+        )
+
+        self.assertEqual(result["verdict"], Verdict.TIME_LIMIT_EXCEEDED)
+        self.assertEqual(result["score"], 3.0)
+        self.assertIn("1.00 / 1.00", result["details"])
+        self.assertIn("2.00 / 2.00", result["details"])
+        self.assertIn("0.00 / 3.00", result["details"])
+        self.assertIn("NOT SCORED", result["details"])
+
+    def test_all_answers_but_a_batch_timeout_receives_zero(self):
+        self.judge.case_scores = [4.0, 6.0]
+
+        result = self.judge.evaluate(
+            _run(stdout="1 2\n3 4\n", cpu_time_ms=1_500.0),
+            _expected([[1, 2], [3, 4]]),
+            LIMITS,
+        )
+
+        self.assertEqual(result["verdict"], Verdict.TIME_LIMIT_EXCEEDED)
+        self.assertEqual(result["score"], 0.0)
+        self.assertIn("discarded", result["details"])
+
+    def test_all_passing_details_show_every_case_score(self):
+        self.judge.case_scores = [4.0, 6.0]
+
+        result = self.judge.evaluate(
+            _run(stdout="1 2\n3 4\n"),
+            _expected([[1, 2], [3, 4]]),
+            LIMITS,
+        )
+
+        self.assertEqual(result["verdict"], Verdict.ACCEPTED)
+        self.assertEqual(result["score"], 10.0)
+        self.assertIn("4.00 / 4.00", result["details"])
+        self.assertIn("6.00 / 6.00", result["details"])
+        self.assertIn("PASS", result["details"])
+
+    def test_wrong_number_of_case_scores_is_a_system_error(self):
+        self.judge.case_scores = [5.0, 5.0, 5.0]
+
+        result = self.judge.evaluate(
+            _run(stdout="1 2\n3 4\n"),
+            _expected([[1, 2], [3, 4]]),
+            LIMITS,
+        )
+
+        self.assertEqual(result["verdict"], Verdict.SYSTEM_ERROR)
+        self.assertEqual(result["score"], 0.0)
+        self.assertIn("case_scores", result["details"])
+
+    def test_case_scores_must_sum_to_the_maximum_score(self):
+        self.judge.case_scores = [2.0, 2.0]
+
+        result = self.judge.evaluate(
+            _run(stdout="1 2\n3 4\n"),
+            _expected([[1, 2], [3, 4]]),
+            LIMITS,
+        )
+
+        self.assertEqual(result["verdict"], Verdict.SYSTEM_ERROR)
+        self.assertEqual(result["score"], 0.0)
+        self.assertIn("sum to 10", result["details"])
+
+    def test_negative_case_scores_are_rejected(self):
+        self.judge.case_scores = [-1.0, 11.0]
+
+        result = self.judge.evaluate(
+            _run(stdout="1 2\n3 4\n"),
+            _expected([[1, 2], [3, 4]]),
+            LIMITS,
+        )
+
+        self.assertEqual(result["verdict"], Verdict.SYSTEM_ERROR)
+        self.assertEqual(result["score"], 0.0)
+        self.assertIn("negative", result["details"])
+
+
+class TestCaseScores(unittest.TestCase):
+    def setUp(self):
+        self.judge = _ListJudge()
+
+    def test_default_scores_split_the_maximum_evenly(self):
+        self.assertEqual(self.judge.get_case_scores(4), [2.5, 2.5, 2.5, 2.5])
+
+    def test_default_scores_are_not_rounded(self):
+        scores = self.judge.get_case_scores(3)
+
+        self.assertEqual(len(scores), 3)
+        self.assertAlmostEqual(sum(scores), MAX_SCORE)
+        self.assertAlmostEqual(scores[0], MAX_SCORE / 3)
+
+    def test_custom_scores_are_returned_in_case_order(self):
+        self.judge.case_scores = [1.5, 1.5, 7.0]
+
+        self.assertEqual(self.judge.get_case_scores(3), [1.5, 1.5, 7.0])
+
+    def test_table_groups_later_cases_and_aligns_columns(self):
+        results = [
+            CaseResult(1, Verdict.ACCEPTED, 1.5, 1.5),
+            CaseResult(2, Verdict.WRONG_ANSWER, 0.0, 1.5),
+        ]
+
+        lines = format_case_scores(results, 5).splitlines()
+
+        self.assertEqual(lines[0], "Test case scores:")
+        self.assertEqual(lines[1].index("Case"), lines[3].index("1"))
+        self.assertEqual(lines[1].index("Verdict"), lines[3].index("PASS"))
+        self.assertIn("3-5", lines[5])
+        self.assertIn("NOT SCORED", lines[5])
+
+    def test_empty_table_explains_that_nothing_was_scored(self):
+        self.assertEqual(
+            format_case_scores([], 5),
+            "Test case scores: no cases were scored.",
+        )
+
+    def test_no_test_cases_is_a_configuration_error(self):
+        with self.assertRaises(ValueError):
+            self.judge.get_case_scores(0)
+
 
 class TestHelpers(unittest.TestCase):
-    def test_score_for_passed_rounds_to_two_decimals(self):
-        self.assertEqual(score_for_passed(1, 3), 3.33)
-        self.assertEqual(score_for_passed(2, 3), 6.67)
-        self.assertEqual(score_for_passed(99, 3), 10.0)
-
     def test_language_profiles_can_be_overridden_per_question(self):
         profiles = {
             **LANGUAGE_PROFILES,
@@ -414,6 +724,8 @@ class TestPistonTransport(unittest.TestCase):
                     "stderr": "",
                     "code": 0,
                     "signal": "",
+                    "status": "AC",
+                    "message": "",
                     "cpu_time": 12.5,
                     "wall_time": 20.0,
                     "memory": 1234,
@@ -432,6 +744,8 @@ class TestPistonTransport(unittest.TestCase):
 
             self.assertEqual(result.stdout, "1 2\n")
             self.assertEqual(result.exit_code, 0)
+            self.assertEqual(result.status, "AC")
+            self.assertEqual(result.message, "")
             self.assertEqual(result.cpu_time_ms, 12.5)
             self.assertEqual(result.memory_bytes, 1234)
             sent_payload = post.call_args.kwargs["json"]

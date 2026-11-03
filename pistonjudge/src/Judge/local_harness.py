@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Type
 
 from .base_judge import BaseJudge, JudgeResult
+from .verdicts import MAX_SCORE
 
 EXTENSIONS = {
     "python": "py",
@@ -50,5 +51,7 @@ def run_local(
         output_file_path=str(question_dir / "~testcases" / "tc.out"),
         language=args.language,
     )
-    print(result)
+    print(f"Verdict: {result['verdict']}")
+    print(f"Score:   {result['score']:.2f} / {MAX_SCORE:.2f}")
+    print(result["details"])
     return result

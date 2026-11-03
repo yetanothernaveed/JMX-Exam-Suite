@@ -311,6 +311,7 @@ namespace command_handler {
         std::string filename = request["payload"]["filename"].get<std::string>();
         std::filesystem::path file_path = std::filesystem::path(settings.workspace_directory) / filename;
 
+        // THIS IS THE SOURCE OF THE BUG. MUST VERIFY THAT IT'S A FILE, not a directory.
         if (!std::filesystem::exists(file_path)) {
             return "Error: File does not exist in exam workspace: " + file_path.string();
         }

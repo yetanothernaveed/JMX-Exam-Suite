@@ -17,7 +17,7 @@ PISTON_URL = os.getenv(
     "PISTON_URL",
     "http://localhost:2000/api/v2/execute",
 )
-PISTON_REQUEST_TIMEOUT_SECONDS = 10
+PISTON_REQUEST_TIMEOUT_SECONDS = 120
 
 BASE_CPU_TIMEOUT_MS = 2_000
 BASE_WALL_TIMEOUT_MS = 3_000
@@ -92,7 +92,14 @@ def language_limits(
 
 @dataclass(frozen=True)
 class RunResult:
-    """The parts of Piston's ``run`` response that the judge needs."""
+    """The parts of Piston's ``run`` response that the judge needs.
+
+    ``status`` and ``message`` are Piston's own termination report, for example
+    ``"TO"`` / ``"Time limit exceeded (wall clock)"`` or ``"RE"`` /
+    ``"Exited with error status 137"``. They are kept because they are the most
+    reliable evidence that a process was stopped, independent of any partial
+    output that happened to be flushed before it was killed.
+    """
 
     stdout: str
     stderr: str
@@ -101,6 +108,8 @@ class RunResult:
     cpu_time_ms: float
     wall_time_ms: float
     memory_bytes: int
+    status: str = ""
+    message: str = ""
 
     @classmethod
     def from_piston(cls, run: dict) -> "RunResult":
@@ -113,6 +122,8 @@ class RunResult:
             cpu_time_ms=float(run.get("cpu_time") or 0),
             wall_time_ms=float(run.get("wall_time") or 0),
             memory_bytes=int(run.get("memory") or 0),
+            status=run.get("status") or "",
+            message=run.get("message") or "",
         )
 
 

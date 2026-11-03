@@ -26,7 +26,13 @@ from .testcases import (
     load_testcases,
     parse_int_row,
 )
-from .verdicts import MAX_SCORE, Verdict, format_mismatch, score_for_passed
+from .verdicts import (
+    MAX_SCORE,
+    CaseResult,
+    Verdict,
+    format_case_scores,
+    format_mismatch,
+)
 
 __all__ = [
     "BaseJudge",
@@ -45,7 +51,8 @@ __all__ = [
     "load_testcases",
     "parse_int_row",
     "MAX_SCORE",
+    "CaseResult",
     "Verdict",
+    "format_case_scores",
     "format_mismatch",
-    "score_for_passed",
 ]
