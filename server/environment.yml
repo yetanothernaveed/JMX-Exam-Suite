@@ -71,4 +71,5 @@ dependencies:
       - uritemplate==4.2.0
       - urllib3==2.6.3
       - yarl==1.24.5
+      - -e ./pistonjudge
 prefix: /home/naveed/miniconda3/envs/jmxenv

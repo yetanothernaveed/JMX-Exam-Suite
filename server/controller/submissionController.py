@@ -1,4 +1,4 @@
-from Judge import judge
+from pistonjudge.src.Judge import judge
 from utils import dynamic_loader
 
 from mysql.connector import Error

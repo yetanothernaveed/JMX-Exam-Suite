@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 import requests
 
-from Judge.base_judge import BaseJudge
-from Judge.piston import (
+from server.pistonjudge.src.Judge.base_judge import BaseJudge
+from server.pistonjudge.src.Judge.piston import (
     LANGUAGE_PROFILES,
     CompilationError,
     LanguageProfile,
@@ -18,12 +18,12 @@ from Judge.piston import (
     execute_submission,
     language_limits,
 )
-from Judge.testcases import (
+from server.pistonjudge.src.Judge.testcases import (
     TestcaseError,
     load_testcases,
     parse_int_row,
 )
-from Judge.verdicts import (
+from server.pistonjudge.src.Judge.verdicts import (
     MAX_SCORE,
     CaseResult,
     Verdict,
