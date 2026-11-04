@@ -377,8 +377,8 @@ class BaseJudge(ABC):
         if any(marker in run.stderr for marker in MEMORY_ERROR_MARKERS):
             return Verdict.MEMORY_LIMIT_EXCEEDED
         if (
-            run.cpu_time_ms >= limits.cpu_timeout_ms
-            or run.wall_time_ms >= limits.wall_timeout_ms
+            run.cpu_time_ms + 100 >= limits.cpu_timeout_ms # Add 100ms buffer to account for measurement inaccuracies
+            or run.wall_time_ms + 100 >= limits.wall_timeout_ms
         ):
             return Verdict.TIME_LIMIT_EXCEEDED
         if cls._is_memory_limit_exceeded(run, limits):
@@ -406,6 +406,12 @@ class BaseJudge(ABC):
         limits: RunLimits,
         case_scores: list[float],
     ) -> JudgeResult:
+        """Classify a failure that happened while the program was running.
+
+        Compile-stage failures never reach this method: ``execute_submission``
+        raises ``CompilationError`` and ``submit`` returns a
+        ``COMPILATION ERROR`` before any test case is evaluated.
+        """
         completed_cases = len(passed)
         if completed_cases < total_cases:
             location = f"test case {completed_cases + 1}"

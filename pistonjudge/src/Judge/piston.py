@@ -36,6 +36,26 @@ class CompilationError(PistonError):
         super().__init__(self.details)
 
 
+def _compile_error_details(compile_result: dict) -> str:
+    """Return the most useful message from a failed Piston compile stage."""
+    details = (
+        compile_result.get("stderr")
+        or compile_result.get("stdout")
+        or compile_result.get("message")
+        or ""
+    ).strip()
+    if details:
+        return details
+
+    status = (compile_result.get("status") or "").strip().upper()
+    signal = (compile_result.get("signal") or "").strip()
+    if status == "TO":
+        return "Compilation timed out."
+    if signal:
+        return f"Compilation terminated by {signal}."
+    return "Compilation failed."
+
+
 @dataclass(frozen=True)
 class LanguageProfile:
     """Scaling factors applied to the baseline limits for one language."""
@@ -136,6 +156,15 @@ def execute_submission(
 ) -> RunResult:
     """Compile and run ``submission_code`` inside its wrapper on Piston.
 
+    For compiled languages, Piston reports a separate ``compile`` stage. A
+    failed compile stage is authoritative: it is raised as ``CompilationError``
+    before the ``run`` result is inspected. Piston v2 copies the compile result
+    into ``run`` when compilation fails, so checking ``compile`` first is what
+    keeps compile errors from being mistaken for runtime errors.
+
+    Interpreted languages such as Python have no ``compile`` key. Their failures
+    are run-stage failures and are returned as a normal :class:`RunResult`.
+
     Raises:
         CompilationError: If Piston reports a compiler failure.
         PistonError: If the request fails or the response is malformed.
@@ -177,10 +206,18 @@ def execute_submission(
     except ValueError as exc:
         raise PistonError("The Piston API returned a response that was not valid JSON.") from exc
 
+    if not isinstance(piston_response, dict):
+        raise PistonError("The Piston API returned an unexpected response.")
+
     compile_result = piston_response.get("compile")
-    if isinstance(compile_result, dict) and (compile_result.get("code") or 0) != 0:
-        message = (compile_result.get("stderr") or compile_result.get("stdout") or "").strip()
-        raise CompilationError(message)
+    if compile_result is not None and not isinstance(compile_result, dict):
+        raise PistonError("The Piston API response contained a malformed compile result.")
+
+    # Piston uses ``compile.code !== 0`` to decide whether compilation failed.
+    # A missing/None code means the compile stage did not complete (for example,
+    # it timed out or was killed), so it must not be treated as a success.
+    if isinstance(compile_result, dict) and compile_result.get("code") != 0:
+        raise CompilationError(_compile_error_details(compile_result))
 
     run = piston_response.get("run")
     if not isinstance(run, dict):

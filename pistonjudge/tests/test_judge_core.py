@@ -498,6 +498,26 @@ class TestEvaluate(unittest.TestCase):
         self.assertEqual(result["score"], 5.0)
         self.assertIn("boom", result["details"])
 
+    def test_python_syntax_error_without_a_compile_stage_is_a_runtime_error(self):
+        result = self.judge.evaluate(
+            _run(
+                stdout="",
+                exit_code=1,
+                stderr=(
+                    '  File "/box/submission/Main", line 1\n'
+                    "    def f(:\n"
+                    "          ^\n"
+                    "SyntaxError: invalid syntax\n"
+                ),
+            ),
+            _expected([[1, 2]]),
+            LIMITS,
+        )
+
+        self.assertEqual(result["verdict"], Verdict.RUNTIME_ERROR)
+        self.assertEqual(result["score"], 0.0)
+        self.assertIn("SyntaxError", result["details"])
+
     def test_wrong_answer_before_a_crash_is_still_a_wrong_answer(self):
         result = self.judge.evaluate(
             _run(stdout="0 2\n", exit_code=1, stderr="boom"),
@@ -622,6 +642,33 @@ class TestEvaluate(unittest.TestCase):
         self.assertEqual(result["verdict"], Verdict.SYSTEM_ERROR)
         self.assertEqual(result["score"], 0.0)
         self.assertIn("negative", result["details"])
+
+
+class TestSubmit(unittest.TestCase):
+    def test_compilation_error_is_reported_as_a_compilation_verdict(self):
+        with tempfile.TemporaryDirectory() as directory:
+            input_path, output_path = _write_cases(
+                directory,
+                "@@CASE-1\n1\n",
+                "@@CASE-1\n1\n",
+            )
+            judge = _ListJudge()
+
+            with patch(
+                "Judge.base_judge.execute_submission",
+                side_effect=CompilationError("Main.java:1: error: bad code"),
+            ):
+                result = judge.submit(
+                    "bad",
+                    "Main.java",
+                    input_path,
+                    output_path,
+                    "java",
+                )
+
+        self.assertEqual(result["verdict"], Verdict.COMPILATION_ERROR)
+        self.assertEqual(result["score"], 0.0)
+        self.assertIn("bad code", result["details"])
 
 
 class TestCaseScores(unittest.TestCase):
@@ -764,6 +811,130 @@ class TestPistonTransport(unittest.TestCase):
                 post.return_value = _FakeResponse(payload)
                 with self.assertRaises(CompilationError):
                     execute_submission("bad", wrapper, "1\n", "java", LIMITS)
+
+    def test_compilation_failure_with_copied_run_result_is_reported(self):
+        with tempfile.TemporaryDirectory() as directory:
+            wrapper = self._wrapper(directory)
+            # Piston v2 copies the compile result into ``run`` when compilation
+            # fails, so the compile check must win over the run result.
+            payload = {
+                "compile": {
+                    "code": 1,
+                    "stderr": "Main.java:1: error: bad code",
+                    "signal": None,
+                    "status": "RE",
+                },
+                "run": {
+                    "stdout": "",
+                    "stderr": "Main.java:1: error: bad code",
+                    "code": 1,
+                    "signal": None,
+                    "status": "RE",
+                },
+            }
+
+            with patch("Judge.piston.requests.post") as post:
+                post.return_value = _FakeResponse(payload)
+                with self.assertRaises(CompilationError) as raised:
+                    execute_submission("bad", wrapper, "1\n", "java", LIMITS)
+
+            self.assertIn("bad code", raised.exception.details)
+
+    def test_successful_compile_with_runtime_failure_returns_a_run_result(self):
+        with tempfile.TemporaryDirectory() as directory:
+            wrapper = self._wrapper(directory)
+            payload = {
+                "compile": {"code": 0, "stderr": "", "signal": None, "status": None},
+                "run": {
+                    "stdout": "",
+                    "stderr": "Exception in thread \"main\" java.lang.ArithmeticException",
+                    "code": 1,
+                    "signal": None,
+                    "status": "RE",
+                },
+            }
+
+            with patch("Judge.piston.requests.post") as post:
+                post.return_value = _FakeResponse(payload)
+                result = execute_submission("code", wrapper, "1\n", "java", LIMITS)
+
+            self.assertEqual(result.exit_code, 1)
+            self.assertIn("ArithmeticException", result.stderr)
+
+    def test_compile_warnings_are_not_a_compilation_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            wrapper = self._wrapper(directory)
+            payload = {
+                "compile": {
+                    "code": 0,
+                    "stderr": "Main.java:1: warning: unchecked operation",
+                    "signal": None,
+                    "status": None,
+                },
+                "run": {
+                    "stdout": "1 2\n",
+                    "stderr": "",
+                    "code": 0,
+                    "signal": None,
+                    "status": "AC",
+                },
+            }
+
+            with patch("Judge.piston.requests.post") as post:
+                post.return_value = _FakeResponse(payload)
+                result = execute_submission("code", wrapper, "1\n", "java", LIMITS)
+
+            self.assertEqual(result.exit_code, 0)
+            self.assertEqual(result.stdout, "1 2\n")
+
+    def test_missing_compile_exit_code_is_a_compilation_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            wrapper = self._wrapper(directory)
+            payload = {
+                "compile": {
+                    "code": None,
+                    "stderr": "",
+                    "signal": None,
+                    "status": "TO",
+                },
+            }
+
+            with patch("Judge.piston.requests.post") as post:
+                post.return_value = _FakeResponse(payload)
+                with self.assertRaises(CompilationError) as raised:
+                    execute_submission("code", wrapper, "1\n", "java", LIMITS)
+
+            self.assertIn("timed out", raised.exception.details.lower())
+
+    def test_python_failure_without_a_compile_key_is_a_run_result(self):
+        with tempfile.TemporaryDirectory() as directory:
+            wrapper = Path(directory) / "Main.py"
+            wrapper.write_text("/*SUBMISSION_CODE*/\n", encoding="utf-8")
+            payload = {
+                "run": {
+                    "stdout": "",
+                    "stderr": "SyntaxError: invalid syntax",
+                    "code": 1,
+                    "signal": None,
+                    "status": "RE",
+                },
+            }
+
+            with patch("Judge.piston.requests.post") as post:
+                post.return_value = _FakeResponse(payload)
+                result = execute_submission("bad", str(wrapper), "", "python", LIMITS)
+
+            self.assertEqual(result.exit_code, 1)
+            self.assertIn("SyntaxError", result.stderr)
+
+    def test_malformed_compile_result_is_a_piston_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            wrapper = self._wrapper(directory)
+
+            with patch("Judge.piston.requests.post") as post:
+                post.return_value = _FakeResponse({"compile": []})
+                with self.assertRaises(PistonError):
+                    execute_submission("code", wrapper, "1\n", "java", LIMITS)
 
     def test_missing_run_result_is_a_piston_error(self):
         with tempfile.TemporaryDirectory() as directory:
