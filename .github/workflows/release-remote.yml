@@ -38,7 +38,7 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Dependencies & nFPM
         run: |
@@ -119,7 +119,7 @@ jobs:
       # 5. Create the private GitHub Release (unchanged behaviour)
       - name: Publish Private GitHub Release
         if: env.PUBLISH == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             remote/dist/*.tar.gz
@@ -149,7 +149,7 @@ jobs:
       # 7. Mirror the release artifacts in the public repository
       - name: Publish Public GitHub Release
         if: env.PUBLISH == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           repository: ${{ vars.APT_REPO }}
           token: ${{ secrets.APT_REPO_TOKEN }}
