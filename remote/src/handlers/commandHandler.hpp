@@ -352,16 +352,14 @@ namespace command_handler {
             return std::string("ERROR: Exception occurred while submitting solution: ") + e.what();
         }
 
-        std::string response_msg = std::format(
-            "Solution submitted sucessfully for Question ID {}.\n Server response:\n"
-            "Verdict: {}\n"
-            "Score: {}\n"
-            "Details: {}\n",
-            request["payload"]["qid"].get<std::string>(),
-            responseJson["payload"]["verdict"].get<std::string>(),
-            responseJson["payload"]["score"].get<int>(),
-            responseJson["payload"]["details"].get<std::string>()
-        );
+        // Portable string building: std::format needs GCC 13+, but the
+        // release build targets Ubuntu 22.04 (GCC 11).
+        std::string response_msg =
+            "Solution submitted sucessfully for Question ID " +
+            request["payload"]["qid"].get<std::string>() + ".\n Server response:\n" +
+            "Verdict: " + responseJson["payload"]["verdict"].get<std::string>() + "\n" +
+            "Score: " + std::to_string(responseJson["payload"]["score"].get<int>()) + "\n" +
+            "Details: " + responseJson["payload"]["details"].get<std::string>() + "\n";
 
         return response_msg;
     }
