@@ -11,6 +11,23 @@ JMX has four main components, arranged in three directories:
 - **JMX Daemon (jmxd)**: A system daemon that runs on the remote PCs, and manages the interactions between the exam takers and the server as the exam takers are trapped inside a sandbox that prevent any and all external communications. JMX creates and listens on an ephemeral unix socket (/run/jmx/jmx.sock). It ensures that all interactions are logged and processed.
 - **JMX Server**: This is the heart of the operations. Students get questions, and submit answers to this server. The server executes student code via the Piston code execution environment and returns results back to the remote PCs. Within the server, a MySQL database logs student scores which is then uploaded to Google sheets once the exam ends.
 
+## Installing the remote CLI and daemon
+
+On Ubuntu-based exam PCs, install from the signed public APT repository:
+
+```bash
+sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://yetanothernaveed.github.io/JMX-APT/KEY.gpg \
+  | sudo gpg --dearmor --yes -o /etc/apt/keyrings/jmx.gpg
+echo "deb [signed-by=/etc/apt/keyrings/jmx.gpg] https://yetanothernaveed.github.io/JMX-APT stable main" \
+  | sudo tee /etc/apt/sources.list.d/jmx.list
+sudo apt update
+sudo apt install jmxremote
+```
+
+Update with `sudo apt update && sudo apt upgrade`. Release and repository
+maintenance details are in [`docs/RELEASING.md`](docs/RELEASING.md).
+
 Each directory contains a separate README.md file that provides detailed instructions on how to set up and use the respective components. Please refer to those files for more information on each component.
 
 Developed by YetAnotherNaveed (github.com/YetAnotherNaveed) and the CSE221L (Algorithms Lab) team at Brac University.

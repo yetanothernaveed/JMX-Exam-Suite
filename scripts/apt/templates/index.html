@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JMX APT Repository</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 48rem; margin: 3rem auto; padding: 0 1rem; line-height: 1.55; color: #1f2328; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    pre { background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; padding: 1rem; overflow-x: auto; }
+    h1, h2 { line-height: 1.2; }
+    a { color: #0969da; }
+  </style>
+</head>
+<body>
+  <h1>JMX APT Repository</h1>
+
+  <p>
+    Packages for the JMX remote CLI and daemon (<code>jmx</code>,
+    <code>jmxd</code>, <code>jmxcleanerd</code>) on Ubuntu-based distributions.
+    This repository is generated automatically from the private JMX source
+    repository.
+  </p>
+
+  <h2>Install</h2>
+  <pre><code>sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL __APT_PAGES_URL__/KEY.gpg | sudo gpg --dearmor --yes -o /etc/apt/keyrings/jmx.gpg
+echo "deb [signed-by=/etc/apt/keyrings/jmx.gpg] __APT_PAGES_URL__ stable main" | sudo tee /etc/apt/sources.list.d/jmx.list
+sudo apt update
+sudo apt install jmxremote</code></pre>
+
+  <h2>Update</h2>
+  <pre><code>sudo apt update
+sudo apt upgrade</code></pre>
+
+  <p>Or upgrade only JMX:</p>
+  <pre><code>sudo apt update
+sudo apt install --only-upgrade jmxremote</code></pre>
+
+  <h2>Verify the repository key</h2>
+  <pre><code>curl -fsSL __APT_PAGES_URL__/KEY.gpg | gpg --show-keys</code></pre>
+
+  <h2>Rollback</h2>
+  <p>Older package versions remain in the repository pool:</p>
+  <pre><code>sudo apt install jmxremote=&lt;version&gt; --allow-downgrades</code></pre>
+
+  <h2>Release downloads</h2>
+  <p><a href="https://github.com/__APT_REPO__/releases">GitHub Releases</a></p>
+
+  <h2>Notes</h2>
+  <ul>
+    <li>The repository is signed with the JMX APT signing key.</li>
+    <li>The package currently supports <code>amd64</code> only.</li>
+    <li>Do not run unattended JMX upgrades during an active exam session.</li>
+  </ul>
+</body>
+</html>

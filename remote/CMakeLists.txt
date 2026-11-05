@@ -12,6 +12,15 @@ add_executable(jmx src/jmx.cpp)
 target_include_directories(jmx PRIVATE src)
 
 add_executable(jmxcleanerd src/jmxcleanerd.cpp)
-target_include_directories(jmx PRIVATE src)
+target_include_directories(jmxcleanerd PRIVATE src)
+
+# Build against the oldest supported Ubuntu release (see release workflow).
+# Static-linking the C++ runtime keeps the package usable across distro
+# versions without pinning libstdc++ versions in the Debian metadata.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  target_link_options(jmx PRIVATE -static-libstdc++ -static-libgcc)
+  target_link_options(jmxd PRIVATE -static-libstdc++ -static-libgcc)
+  target_link_options(jmxcleanerd PRIVATE -static-libstdc++ -static-libgcc)
+endif()
 
 install(TARGETS jmxcleanerd jmxd jmx RUNTIME DESTINATION bin)

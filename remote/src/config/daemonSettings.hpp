@@ -7,7 +7,7 @@
 struct DaemonSettings {
     static constexpr const char* DEFAULT_CONFIG_PATH = "/etc/jmxd/jmxd.conf";
     std::string socket_directory = "/run/jmx";
-    std::string workspace_directory = "/home/naveed/exam_workspace"; // Update this for production
+    std::string workspace_directory = "/home/examkiosk/exam_workspace";
     std::string server_address = "127.0.0.1";
     std::string server_port = "8080";
     std::string session_duration_in_hours = "2";

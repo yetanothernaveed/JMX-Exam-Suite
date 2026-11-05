@@ -4,14 +4,33 @@ on:
   push:
     tags:
       - 'jmxremote-*-v*'  # Format: jmxremote-<codename>-v<version> (e.g., jmxremote-versioncodename-v26.08.1)
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (e.g. 26.11.4)'
+        required: true
+        type: string
+      publish:
+        description: 'Publish to JMX-APT and create the public release'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
 
+concurrency:
+  group: jmx-remote-release
+  cancel-in-progress: false
+
+env:
+  APT_REPO: ${{ vars.APT_REPO }}
+  APT_PAGES_URL: ${{ vars.APT_PAGES_URL }}
+
 jobs:
   release:
-    runs-on: ubuntu-latest
-    
+    runs-on: ubuntu-22.04
+
     # Default working directory for 'run:' shell steps
     defaults:
       run:
@@ -25,20 +44,44 @@ jobs:
         run: |
           echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | sudo tee /etc/apt/sources.list.d/goreleaser.list
           sudo apt-get update
-          sudo apt-get install -y cmake build-essential nfpm
+          sudo apt-get install -y cmake build-essential nfpm aptly gnupg curl
 
       - name: Extract Clean Version
         id: version
+        env:
+          RAW_TAG: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_PUBLISH: ${{ inputs.publish }}
         run: |
-          RAW_TAG="${{ github.ref_name }}"
-          CLEAN_VER=$(echo "$RAW_TAG" | sed -E 's/^jmxremote-.+-v([0-9]+(\.[0-9]+)*)$/\1/')
-          echo "VERSION=$CLEAN_VER" >> "$GITHUB_ENV"
-          echo "TAG_NAME=$RAW_TAG" >> "$GITHUB_ENV"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            VERSION="${INPUT_VERSION#v}"
+            TAG_NAME="jmxremote-manual-v${VERSION}"
+            PUBLISH="${INPUT_PUBLISH:-false}"
+          else
+            VERSION=$(printf '%s' "$RAW_TAG" | sed -E 's/^jmxremote-(.+)-v([0-9]+(\.[0-9]+)*)$/\2/')
+            TAG_NAME="$RAW_TAG"
+            PUBLISH="true"
+          fi
+
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+(\.[0-9]+)*$'; then
+            echo "::error::Could not determine a valid version from '${INPUT_VERSION:-$RAW_TAG}'"
+            exit 1
+          fi
+
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "TAG_NAME=$TAG_NAME" >> "$GITHUB_ENV"
+          echo "PUBLISH=$PUBLISH" >> "$GITHUB_ENV"
+          echo "Building version $VERSION (publish=$PUBLISH)"
 
       # 1. Build and stage binaries into remote/dist/bin/
+      # Plain CMake commands are used here instead of the workflow preset so
+      # the release can build on Ubuntu 22.04's CMake 3.22 (the preset file
+      # uses schema version 6, which needs a newer CMake).
       - name: Build & Stage Binaries via CMake
         run: |
-          cmake --workflow --preset ci-install
+          cmake -S . -B build -DCMAKE_INSTALL_PREFIX="$PWD/dist"
+          cmake --build build --target install --parallel "$(nproc)"
 
       # 2. Package into tarball
       - name: Create Tarball Package
@@ -46,17 +89,17 @@ jobs:
           PACKAGE_NAME="jmxremote-${VERSION}-linux-amd64"
           mkdir -p package/${PACKAGE_NAME}/bin
           mkdir -p package/${PACKAGE_NAME}/systemd
-          
+
           cp dist/bin/jmx package/${PACKAGE_NAME}/bin/
           cp dist/bin/jmxd package/${PACKAGE_NAME}/bin/
           cp dist/bin/jmxcleanerd package/${PACKAGE_NAME}/bin/
-          
+
           cp systemd/jmxd.service package/${PACKAGE_NAME}/systemd/
           cp systemd/jmxcleanerd.service package/${PACKAGE_NAME}/systemd/
           cp systemd/jmxcleanerd.timer package/${PACKAGE_NAME}/systemd/
-          
+
           cp scripts/install.sh package/${PACKAGE_NAME}/
-          
+
           cd package
           tar -czvf ${PACKAGE_NAME}.tar.gz ${PACKAGE_NAME}
           mv *.tar.gz ../dist/
@@ -64,17 +107,18 @@ jobs:
       # 3. Package into .deb and .rpm
       - name: Build .deb and .rpm Packages
         run: |
-          VERSION=${VERSION} nfpm package --config nfpm.yaml --target dist/jmx_${VERSION}_amd64.deb
-          VERSION=${VERSION} nfpm package --config nfpm.yaml --target dist/jmx_${VERSION}_amd64.rpm
+          VERSION=${VERSION} nfpm package --config nfpm.yaml --target dist/jmxremote_${VERSION}_amd64.deb
+          VERSION=${VERSION} nfpm package --config nfpm.yaml --target dist/jmxremote-${VERSION}-1.x86_64.rpm
 
       # 4. Generate Checksums
       - name: Generate Checksums
         run: |
           cd dist
-          sha256sum *.tar.gz *.deb *.rpm > SHA256SUMS
+          sha256sum jmxremote_*.deb jmxremote-*.rpm jmxremote-*.tar.gz > SHA256SUMS
 
-      # 5. Create GitHub Release (Paths updated to relative repository root)
-      - name: Publish GitHub Release
+      # 5. Create the private GitHub Release (unchanged behaviour)
+      - name: Publish Private GitHub Release
+        if: env.PUBLISH == 'true'
         uses: softprops/action-gh-release@v2
         with:
           files: |
@@ -86,3 +130,73 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
+
+      # 6. Add the new .deb to the public signed APT repository
+      - name: Publish APT repository to JMX-APT
+        if: env.PUBLISH == 'true'
+        working-directory: .
+        env:
+          VERSION: ${{ env.VERSION }}
+          APT_REPO: ${{ vars.APT_REPO }}
+          APT_PAGES_URL: ${{ vars.APT_PAGES_URL }}
+          APT_REPO_TOKEN: ${{ secrets.APT_REPO_TOKEN }}
+          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
+          APT_GPG_KEY_ID: ${{ vars.APT_GPG_KEY_ID }}
+        run: |
+          ./scripts/apt/publish-apt-repo.sh
+
+      # 7. Mirror the release artifacts in the public repository
+      - name: Publish Public GitHub Release
+        if: env.PUBLISH == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: ${{ vars.APT_REPO }}
+          token: ${{ secrets.APT_REPO_TOKEN }}
+          target_commitish: main
+          tag_name: v${{ env.VERSION }}
+          name: JMX Remote ${{ env.VERSION }}
+          generate_release_notes: false
+          body: |
+            JMX remote CLI and daemon version ${{ env.VERSION }}.
+
+            Install/update via APT:
+
+            ```bash
+            sudo apt update
+            sudo apt install jmxremote
+            ```
+
+            Repository: ${{ vars.APT_PAGES_URL }}
+            Source commit: ${{ github.sha }}
+          files: |
+            remote/dist/jmxremote_*.deb
+            remote/dist/jmxremote-*.rpm
+            remote/dist/jmxremote-*.tar.gz
+            remote/dist/SHA256SUMS
+
+      # 8. Best-effort check that GitHub Pages has picked up the new metadata.
+      # Pages deployment is asynchronous, so this deliberately does not fail
+      # the release if the CDN has not updated yet.
+      - name: Verify Published APT Repository (best effort)
+        if: env.PUBLISH == 'true'
+        continue-on-error: true
+        working-directory: .
+        env:
+          APT_PAGES_URL: ${{ vars.APT_PAGES_URL }}
+        run: |
+          GNUPGHOME=$(mktemp -d)
+          export GNUPGHOME
+          trap 'rm -rf "$GNUPGHOME"' EXIT
+
+          for attempt in $(seq 1 30); do
+            if curl -fsSL "$APT_PAGES_URL/KEY.gpg" -o "$GNUPGHOME/KEY.gpg" &&
+               curl -fsSL "$APT_PAGES_URL/dists/stable/InRelease" -o "$GNUPGHOME/InRelease"; then
+              gpg --import "$GNUPGHOME/KEY.gpg" >/dev/null 2>&1
+              gpg --verify "$GNUPGHOME/InRelease" && exit 0
+            fi
+            echo "Waiting for GitHub Pages deployment (attempt $attempt/30)..."
+            sleep 10
+          done
+
+          echo "::warning::APT repository is not visible through GitHub Pages yet"
