@@ -2,13 +2,23 @@ name: "jmxremote"
 arch: "amd64"
 platform: "linux"
 version: "${VERSION}"
-section: "default"
+section: "utils"
 priority: "optional"
 maintainer: "Sayeedur Rahman (yetanothernaveed)"
 description: "JMX CLI and JMX Daemon package"
 vendor: "yetanothernaveed"
-homepage: "https://github.com/yetanothernaveed"
+homepage: "https://github.com/yetanothernaveed/JMX-APT"
 license: "MIT"
+
+depends:
+  - libc6
+  - libstdc++6
+
+overrides:
+  rpm:
+    depends:
+      - glibc
+      - libstdc++
 
 contents:
   - src: ./dist/bin/jmx

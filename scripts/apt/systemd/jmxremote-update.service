@@ -1,0 +1,11 @@
+[Unit]
+Description=Update the JMX remote package
+After=network-online.target
+Wants=network-online.target
+# Never update/restart jmxd while an exam session is active.
+ConditionPathExists=!/run/jmx/sessions/current_session.txt
+
+[Service]
+Type=oneshot
+Environment=DEBIAN_FRONTEND=noninteractive
+ExecStart=/bin/bash -c 'apt-get update -qq && apt-get install -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold --only-upgrade jmxremote'

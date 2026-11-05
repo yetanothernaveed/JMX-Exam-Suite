@@ -30,5 +30,12 @@ NoNewPrivileges=true
 ProtectSystem=strict
 PrivateTmp=true
 
+# ProtectSystem=strict makes the whole filesystem read-only. These are the
+# paths jmxd needs to write: its generated config and the exam workspace.
+# The workspace is prefixed with "-" so a machine without an exam workspace
+# can still install/start the package; restart jmxd after creating it.
+# Keep this in sync if workspace_directory is changed in /etc/jmxd/jmxd.conf.
+ReadWritePaths=/etc/jmxd -/home/examkiosk/exam_workspace
+
 [Install]
 WantedBy=multi-user.target
