@@ -55,6 +55,13 @@ WantedBy=graphical.target
 EOF
 ```
 
+Keep the copy under `/opt` in sync (some build notes copy it from there):
+
+```bash
+install -m 0644 /etc/systemd/system/jmx-setup.service \
+  /opt/jmx-setup/jmx-setup.service
+```
+
 Move the enablement from `multi-user.target` (which blocks the display manager)
 to `graphical.target` (starts alongside SDDM):
 
