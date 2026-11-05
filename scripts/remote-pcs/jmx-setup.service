@@ -1,0 +1,25 @@
+[Unit]
+Description=Provision JMX exam kiosk on first boot
+Documentation=https://github.com/yetanothernaveed/JMX-Exam-Suite
+# Never run inside the live ISO session. The live image boots with
+# boot=casper, and provisioning there is both pointless (the overlay is
+# discarded) and harmful: the unit holds back graphical.target while apt
+# installs packages, so SDDM never starts and the screen stays black with a
+# cursor. Installed systems do not have boot=casper, so they still run this.
+ConditionKernelCommandLine=!boot=casper
+ConditionPathExists=!/var/lib/jmx-setup/completed
+Wants=network-online.target
+After=network-online.target display-manager.service
+
+[Service]
+Type=oneshot
+StateDirectory=jmx-setup
+WorkingDirectory=/opt/jmx-setup
+ExecStart=/bin/bash /opt/jmx-setup/setup_script.sh
+ExecStartPost=/usr/bin/touch /var/lib/jmx-setup/completed
+# SDDM may have cached the old session list; reload it after provisioning.
+ExecStartPost=-/usr/bin/systemctl try-restart sddm.service
+RemainAfterExit=yes
+
+[Install]
+WantedBy=graphical.target

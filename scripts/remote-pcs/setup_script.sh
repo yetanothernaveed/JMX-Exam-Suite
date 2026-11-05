@@ -3,6 +3,16 @@ set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Refuse to provision the live ISO session. The live image boots with
+# boot=casper; changes made here are thrown away, and the work (apt installs,
+# initramfs rebuilds) delays the display manager so long that boot appears to
+# hang on a black screen. The installed system does not have boot=casper, so
+# this guard only affects the live environment.
+if grep -qw 'boot=casper' /proc/cmdline 2>/dev/null; then
+    echo "Live ISO environment detected (boot=casper); skipping JMX setup."
+    exit 0
+fi
+
 echo ">>> [1] Load custom branding..."
 source branding/branding.sh
 
