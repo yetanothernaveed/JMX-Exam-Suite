@@ -7,6 +7,10 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
+# Keep this above the expected number of simultaneous requests. Each
+# submission needs a connection briefly while it records its result.
+DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "50"))
+
 # Global Variable
 DB_CONN_POOL = None
 
@@ -33,7 +37,7 @@ def connect_to_mysql_database(section, database_name):
         global DB_CONN_POOL
         DB_CONN_POOL = mysql.connector.pooling.MySQLConnectionPool(
             pool_name="db_conn_pool",
-            pool_size=10,
+            pool_size=DB_POOL_SIZE,
             host=os.getenv("DB_HOST"),
             user=os.getenv("DB_USER"),
             password=os.getenv("DB_PASSWORD"),
