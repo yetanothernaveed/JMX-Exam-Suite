@@ -6,6 +6,8 @@ def get_stats_controller(payload, DB_CONN_POOL):
     if DB_CONN_POOL is None:
         return {"status": "ERROR", "message": "Database connection is not available."}
 
+    conn = None
+    cursor = None
     try:
         conn = DB_CONN_POOL.get_connection()
         cursor = conn.cursor(dictionary=True)
@@ -32,9 +34,14 @@ def get_stats_controller(payload, DB_CONN_POOL):
 
     except Exception as e:
         return {"status": "ERROR", "message": str(e)}
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
 
     return {
-        "status": "SUCCESS", 
+        "status": "SUCCESS",
         "message": f"Stats retrieved for student {student_id}.",
         "payload": {
             "stats": stats
