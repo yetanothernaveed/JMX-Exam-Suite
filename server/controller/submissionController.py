@@ -88,7 +88,7 @@ def write_to_files(payload, user_args, score, file_extension, pc_id, DB_CONN_POO
                 print("MySQL connection returned to pool.")
 
     submission_file_name = (
-        f"{qid}_{pc_id}_{datetime.now().time()}_{uuid4().hex}."
+        f"{qid}_scored{score}_{datetime.now().time()}_{uuid4().hex}_{pc_id}."
         f"{file_extension}"
     )
 
