@@ -57,8 +57,7 @@ def write_to_files(payload, user_args, score, file_extension, DB_CONN_POOL):
     responses_folder = user_args.get("responses_folder")
 
     student_folder = f"{responses_folder}/{student_id}"
-    if not os.path.exists(student_folder):
-        os.makedirs(student_folder)
+    os.makedirs(student_folder, exist_ok=True)
 
 
     # Get current max score for this student and question
@@ -86,7 +85,9 @@ def write_to_files(payload, user_args, score, file_extension, DB_CONN_POOL):
     submission_file_name = f"{qid}_{socket.gethostname()}_{datetime.now().time()}.{file_extension}"
 
     if score >= max_score:
-        best_folder = f"{student_folder}/best/{submission_file_name}"
+        best_dir = f"{student_folder}/best"
+        os.makedirs(best_dir, exist_ok=True)
+        best_folder = f"{best_dir}/{submission_file_name}"
         with open(best_folder, "w") as f:
             f.write(code)
         print(f"Best submission for {student_id} on question {qid} written to {best_folder}")

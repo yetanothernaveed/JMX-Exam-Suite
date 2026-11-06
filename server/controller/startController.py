@@ -30,9 +30,7 @@ def start_controller(payload, user_args=None):
             print(f"Student {student_id} found in the database.")
 
             student_folder_path = os.path.join(user_args["responses_folder"], student_id, "best")
-            if not os.path.exists(student_folder_path):
-                os.makedirs(student_folder_path)
-                print(f"Student folder did not exist so it was created: {student_folder_path}")
+            os.makedirs(student_folder_path, exist_ok=True)
 
             # Check if an active session exists for this hostname and a different student_id
             cursor.execute("SELECT * FROM sessions WHERE hostname = %s AND student_id != %s ORDER BY time DESC LIMIT 1", (hostname, student_id))
