@@ -66,9 +66,11 @@ def start_controller(payload, user_args=None):
                 cursor.execute("REPLACE INTO sessions (hostname, student_id) VALUES (%s, %s)", (hostname, student_id))
                 print(f"Session started for student {student_id} on hostname {hostname}.")
         finally:
-            if cursor is not None:
-                cursor.close()
-            conn.close()
+            try:
+                if cursor is not None:
+                    cursor.close()
+            finally:
+                conn.close()
 
         return {
             "status": "SUCCESS",

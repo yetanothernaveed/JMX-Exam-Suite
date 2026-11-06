@@ -35,11 +35,13 @@ def update_results(payload, score, DB_CONN_POOL):
     except Error as e:
         print("Error while connecting to MySQL using connection pool: ", e)
     finally:
-        if conn is not None and conn.is_connected():
-            if cursor is not None: 
+        try:
+            if cursor is not None:
                 cursor.close()
-            conn.close()
-            print("MySQL connection returned to pool.")
+        finally:
+            if conn is not None:
+                conn.close()
+                print("MySQL connection returned to pool.")
 
 def write_to_files(payload, user_args, score, file_extension, DB_CONN_POOL):
     """
@@ -77,11 +79,13 @@ def write_to_files(payload, user_args, score, file_extension, DB_CONN_POOL):
     except Error:
         raise Error("Unknown error while connecting to MySQL using connection pool. Could not get max score for student and question.")
     finally:
-        if conn is not None and conn.is_connected():
-            if cursor is not None: 
+        try:
+            if cursor is not None:
                 cursor.close()
-            conn.close()
-            print("MySQL connection returned to pool.")
+        finally:
+            if conn is not None:
+                conn.close()
+                print("MySQL connection returned to pool.")
 
     submission_file_name = (
         f"{qid}_{socket.gethostname()}_{datetime.now().time()}_{uuid4().hex}."
