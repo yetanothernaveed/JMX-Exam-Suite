@@ -10,10 +10,10 @@ by the release workflow from the private JMX source repository.
 
 ```bash
 sudo install -d -m 0755 /etc/apt/keyrings
-curl -fsSL https://__APT_OWNER__.github.io/__APT_NAME__/KEY.gpg \
+curl -fsSL https://yetanothernaveed.github.io/JMX-APT/KEY.gpg \
   | sudo gpg --dearmor --yes -o /etc/apt/keyrings/jmx.gpg
 
-echo "deb [signed-by=/etc/apt/keyrings/jmx.gpg] https://__APT_OWNER__.github.io/__APT_NAME__ stable main" \
+echo "deb [signed-by=/etc/apt/keyrings/jmx.gpg] https://yetanothernaveed.github.io/JMX-APT stable main" \
   | sudo tee /etc/apt/sources.list.d/jmx.list
 
 sudo apt update
