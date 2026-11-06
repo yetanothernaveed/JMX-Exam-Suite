@@ -43,7 +43,7 @@ def update_results(payload, score, DB_CONN_POOL):
                 conn.close()
                 print("MySQL connection returned to pool.")
 
-def write_to_files(payload, user_args, score, file_extension, DB_CONN_POOL):
+def write_to_files(payload, user_args, score, file_extension, pc_id, DB_CONN_POOL):
     """
     Writes the student's code submission to a file in the responses folder.
     Args:
@@ -88,7 +88,7 @@ def write_to_files(payload, user_args, score, file_extension, DB_CONN_POOL):
                 print("MySQL connection returned to pool.")
 
     submission_file_name = (
-        f"{qid}_{socket.gethostname()}_{datetime.now().time()}_{uuid4().hex}."
+        f"{qid}_{pc_id}_{datetime.now().time()}_{uuid4().hex}."
         f"{file_extension}"
     )
 
@@ -182,7 +182,7 @@ def submit(payload, user_args, DB_CONN_POOL):
 
     score = judge_output.get("score", 0)
     update_results(payload, score, DB_CONN_POOL)
-    write_to_files(payload, user_args, score, payload.get("filename").split(".")[-1], DB_CONN_POOL)
+    write_to_files(payload, user_args, score, payload.get("filename").split(".")[-1], payload.get("pc_id"), DB_CONN_POOL)
 
     return {
         "status": "SUCCESS",
