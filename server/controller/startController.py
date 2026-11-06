@@ -14,11 +14,19 @@ def start_controller(payload, user_args=None):
 
     if db.connectToDB.DB_CONN_POOL:
         conn = db.connectToDB.DB_CONN_POOL.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM students WHERE id = %s", (student_id,))
-        found = cursor.fetchone()
+        cursor = None
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM students WHERE id = %s", (student_id,))
+            found = cursor.fetchone()
 
-        if found and type(found) is tuple and len(found) >= 2:
+            if not (found and type(found) is tuple and len(found) >= 2):
+                print(f"Student {student_id} not found in the database.")
+                return {
+                    "status": "ERROR",
+                    "message": f"Student with id {student_id} was not found in student list."
+                }
+
             print(f"Student {student_id} found in the database.")
 
             student_folder_path = os.path.join(user_args["responses_folder"], student_id, "best")
@@ -52,24 +60,21 @@ def start_controller(payload, user_args=None):
             # Insert or update the session for this hostname and student_id
             cursor.execute("REPLACE INTO sessions (hostname, student_id) VALUES (%s, %s)", (hostname, student_id))
             print(f"Session started for student {student_id} on hostname {hostname}.")
-            
-            return {
-                "status": "SUCCESS", 
-                "message": f"Student {student_id} found.", 
-                "payload": {
-                    "student_id": found[0],
-                    "student_name": found[1],
-                    "exam_id": user_args.get("exam_id") if user_args else None,
-                    "questions": get_questions_controller(payload, user_args)["payload"]["questions"]
-                }
+        finally:
+            if cursor is not None:
+                cursor.close()
+            conn.close()
+
+        return {
+            "status": "SUCCESS",
+            "message": f"Student {student_id} found.",
+            "payload": {
+                "student_id": found[0],
+                "student_name": found[1],
+                "exam_id": user_args.get("exam_id") if user_args else None,
+                "questions": get_questions_controller(payload, user_args)["payload"]["questions"]
             }
-        else:
-            print(f"Student {student_id} not found in the database.")
-            
-            return {
-                "status": "ERROR", 
-                "message": f"Student with id {student_id} was not found in student list."
-            }
+        }
     else:
         raise DatabaseError("Database connection is not established. Please connect to the database first.")
 
