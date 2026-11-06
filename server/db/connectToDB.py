@@ -4,15 +4,87 @@ from .connectToDBServer import connect_to_mysql_server, close_connection_to_mysq
 import mysql.connector.pooling
 from mysql.connector import Error
 import os
+import threading
 from dotenv import load_dotenv
 load_dotenv()
 
-# Keep this above the expected number of simultaneous requests. Each
-# submission needs a connection briefly while it records its result.
-DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "50"))
+# MySQL Connector/Python refuses to create a pool larger than 32.
+MAX_DB_POOL_SIZE = 32
+
+
+def _configured_pool_size():
+    try:
+        requested = int(os.getenv("DB_POOL_SIZE", str(MAX_DB_POOL_SIZE)))
+    except ValueError:
+        requested = MAX_DB_POOL_SIZE
+
+    return max(1, min(requested, MAX_DB_POOL_SIZE))
+
+
+DB_POOL_SIZE = _configured_pool_size()
 
 # Global Variable
 DB_CONN_POOL = None
+
+
+class _PooledConnection:
+    """Proxy that releases its pool slot exactly once when closed."""
+
+    def __init__(self, connection, release_slot):
+        self._connection = connection
+        self._release_slot = release_slot
+        self._closed = False
+        self._close_lock = threading.Lock()
+
+    def __getattr__(self, name):
+        return getattr(self._connection, name)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+
+    def close(self):
+        with self._close_lock:
+            if self._closed:
+                return
+
+            self._closed = True
+            connection = self._connection
+            self._connection = None
+
+        try:
+            connection.close()
+        finally:
+            self._release_slot()
+
+
+class BlockingConnectionPool:
+    """Waits for a free connection instead of failing when the pool is busy.
+
+    The connector's pool is capped at 32 connections, but the server may
+    receive more simultaneous requests. This wrapper lets the extra requests
+    queue for a connection rather than raising ``PoolError``.
+    """
+
+    def __init__(self, pool, size):
+        self._pool = pool
+        self._slots = threading.BoundedSemaphore(size)
+
+    def __getattr__(self, name):
+        return getattr(self._pool, name)
+
+    def get_connection(self):
+        self._slots.acquire()
+        try:
+            connection = self._pool.get_connection()
+        except BaseException:
+            self._slots.release()
+            raise
+
+        return _PooledConnection(connection, self._slots.release)
+
 
 def connect_to_mysql_database(section, database_name):
     """
@@ -35,7 +107,7 @@ def connect_to_mysql_database(section, database_name):
     
     try:
         global DB_CONN_POOL
-        DB_CONN_POOL = mysql.connector.pooling.MySQLConnectionPool(
+        pool = mysql.connector.pooling.MySQLConnectionPool(
             pool_name="db_conn_pool",
             pool_size=DB_POOL_SIZE,
             host=os.getenv("DB_HOST"),
@@ -44,6 +116,7 @@ def connect_to_mysql_database(section, database_name):
             database=database_name,
             autocommit=True
         )
+        DB_CONN_POOL = BlockingConnectionPool(pool, DB_POOL_SIZE)
 
         return DB_CONN_POOL
     except Error as e:
