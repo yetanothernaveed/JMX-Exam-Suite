@@ -5,6 +5,7 @@ from mysql.connector import Error
 import socket
 import os
 from datetime import datetime
+from uuid import uuid4
 
 def update_results(payload, score, DB_CONN_POOL):
     """
@@ -34,11 +35,13 @@ def update_results(payload, score, DB_CONN_POOL):
     except Error as e:
         print("Error while connecting to MySQL using connection pool: ", e)
     finally:
-        if conn is not None and conn.is_connected():
-            if cursor is not None: 
+        try:
+            if cursor is not None:
                 cursor.close()
-            conn.close()
-            print("MySQL connection returned to pool.")
+        finally:
+            if conn is not None:
+                conn.close()
+                print("MySQL connection returned to pool.")
 
 def write_to_files(payload, user_args, score, file_extension, pc_id, DB_CONN_POOL):
     """
@@ -57,8 +60,7 @@ def write_to_files(payload, user_args, score, file_extension, pc_id, DB_CONN_POO
     responses_folder = user_args.get("responses_folder")
 
     student_folder = f"{responses_folder}/{student_id}"
-    if not os.path.exists(student_folder):
-        os.makedirs(student_folder)
+    os.makedirs(student_folder, exist_ok=True)
 
 
     # Get current max score for this student and question
@@ -77,8 +79,8 @@ def write_to_files(payload, user_args, score, file_extension, pc_id, DB_CONN_POO
     except Error:
         raise Error("Unknown error while connecting to MySQL using connection pool. Could not get max score for student and question.")
     finally:
-        if conn is not None and conn.is_connected():
-            if cursor is not None: 
+        try:
+            if cursor is not None:
                 cursor.close()
             conn.close()
             print("MySQL connection returned to pool.")
@@ -86,7 +88,9 @@ def write_to_files(payload, user_args, score, file_extension, pc_id, DB_CONN_POO
     submission_file_name = f"{qid}_{pc_id}_{datetime.now().time()}.{file_extension}"
 
     if score >= max_score:
-        best_folder = f"{student_folder}/best/{submission_file_name}"
+        best_dir = f"{student_folder}/best"
+        os.makedirs(best_dir, exist_ok=True)
+        best_folder = f"{best_dir}/{submission_file_name}"
         with open(best_folder, "w") as f:
             f.write(code)
         print(f"Best submission for {student_id} on question {qid} written to {best_folder}")

@@ -4,6 +4,12 @@ from controller.getQuestionsController import get_questions_controller
 from utils.promptWindow import request_approval_dialog
 
 import os
+import threading
+
+# Starting a session is a read-then-write operation. Serialize it so two
+# students cannot both pass the active-session check before either one writes.
+_session_lock = threading.Lock()
+
 
 def start_controller(payload, user_args=None):
     if not user_args or not isinstance(user_args, dict):
@@ -14,62 +20,68 @@ def start_controller(payload, user_args=None):
 
     if db.connectToDB.DB_CONN_POOL:
         conn = db.connectToDB.DB_CONN_POOL.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM students WHERE id = %s", (student_id,))
-        found = cursor.fetchone()
+        cursor = None
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM students WHERE id = %s", (student_id,))
+            found = cursor.fetchone()
 
-        if found and type(found) is tuple and len(found) >= 2:
+            if not (found and type(found) is tuple and len(found) >= 2):
+                print(f"Student {student_id} not found in the database.")
+                return {
+                    "status": "ERROR",
+                    "message": f"Student with id {student_id} was not found in student list."
+                }
+
             print(f"Student {student_id} found in the database.")
 
             student_folder_path = os.path.join(user_args["responses_folder"], student_id, "best")
-            if not os.path.exists(student_folder_path):
-                os.makedirs(student_folder_path)
-                print(f"Student folder did not exist so it was created: {student_folder_path}")
+            os.makedirs(student_folder_path, exist_ok=True)
 
-            # Check if an active session exists for this hostname and a different student_id
-            cursor.execute("SELECT * FROM sessions WHERE hostname = %s AND student_id != %s ORDER BY time DESC LIMIT 1", (hostname, student_id))
-            active_session = cursor.fetchone()
+            with _session_lock:
+                # Check if an active session exists for this hostname and a different student_id
+                cursor.execute("SELECT * FROM sessions WHERE hostname = %s AND student_id != %s ORDER BY time DESC LIMIT 1", (hostname, student_id))
+                active_session = cursor.fetchone()
 
-            if active_session:
-                prompt_msg = (
-                    f"An active session already exists for hostname '{hostname}' "
-                    f"belonging to Student ID: '{active_session[1]}'.\n"
-                    f"Student ID '{student_id}' is requesting to overwrite this session.\n"
-                    f"If a student knowingly did this without a valid reason, consider this an academic integrity violation.\n"
-                    f"Would you like to approve the session override?"
-                )
+                if active_session:
+                    prompt_msg = (
+                        f"An active session already exists for hostname '{hostname}' "
+                        f"belonging to Student ID: '{active_session[1]}'.\n"
+                        f"Student ID '{student_id}' is requesting to overwrite this session.\n"
+                        f"If a student knowingly did this without a valid reason, consider this an academic integrity violation.\n"
+                        f"Would you like to approve the session override?"
+                    )
 
-                # Spawn the external terminal window and wait for approval
-                approved = request_approval_dialog("Session Override Request", prompt_msg)
-                
-                if not approved:
-                    print(f"Approval denied or timed out for hostname {hostname}.")
-                    return {
-                        "status": "ERROR",
-                        "message": f"An active session already exists for hostname {hostname} with a different student ID ({active_session[1]}). Session override approval was denied."
-                    }
-            
-            # Insert or update the session for this hostname and student_id
-            cursor.execute("REPLACE INTO sessions (hostname, student_id) VALUES (%s, %s)", (hostname, student_id))
-            print(f"Session started for student {student_id} on hostname {hostname}.")
-            
-            return {
-                "status": "SUCCESS", 
-                "message": f"Student {student_id} found.", 
-                "payload": {
-                    "student_id": found[0],
-                    "student_name": found[1],
-                    "exam_id": user_args.get("exam_id") if user_args else None,
-                    "questions": get_questions_controller(payload, user_args)["payload"]["questions"]
-                }
+                    # Spawn the external terminal window and wait for approval
+                    approved = request_approval_dialog("Session Override Request", prompt_msg)
+
+                    if not approved:
+                        print(f"Approval denied or timed out for hostname {hostname}.")
+                        return {
+                            "status": "ERROR",
+                            "message": f"An active session already exists for hostname {hostname} with a different student ID ({active_session[1]}). Session override approval was denied."
+                        }
+
+                # Insert or update the session for this hostname and student_id
+                cursor.execute("REPLACE INTO sessions (hostname, student_id) VALUES (%s, %s)", (hostname, student_id))
+                print(f"Session started for student {student_id} on hostname {hostname}.")
+        finally:
+            try:
+                if cursor is not None:
+                    cursor.close()
+            finally:
+                conn.close()
+
+        return {
+            "status": "SUCCESS",
+            "message": f"Student {student_id} found.",
+            "payload": {
+                "student_id": found[0],
+                "student_name": found[1],
+                "exam_id": user_args.get("exam_id") if user_args else None,
+                "questions": get_questions_controller(payload, user_args)["payload"]["questions"]
             }
-        else:
-            print(f"Student {student_id} not found in the database.")
-            
-            return {
-                "status": "ERROR", 
-                "message": f"Student with id {student_id} was not found in student list."
-            }
+        }
     else:
         raise DatabaseError("Database connection is not established. Please connect to the database first.")
 

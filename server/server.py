@@ -1,35 +1,49 @@
 import socket
+import threading
 from pathlib import Path
 
 from router import router
 from salp import send, receive
 from utils import folderStructure
 
+MAX_PENDING_CONNECTIONS = 128
+
+def handle_client(conn, addr, user_args, DB_CONN_POOL):
+    """Handle one client connection without blocking the accept loop."""
+    try:
+        message_json = receive.receive_json(conn)
+        if message_json is None:
+            return
+
+        print(f"\nReceived Message: {message_json}\n")
+
+        server_response = router(message_json, user_args, DB_CONN_POOL)
+        send.send_json(conn, server_response)
+
+    except Exception as e:
+        print(f"Error handling data: {e}")
+    finally:
+        conn.close()
+        print(f"Connection with {addr} closed.\n")
+
 def start_server(host='0.0.0.0', port=8080, user_args=None, DB_CONN_POOL=None):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) # Free port
     server_socket.bind((host, port))
-    server_socket.listen(10)
+    server_socket.listen(MAX_PENDING_CONNECTIONS)
     print(f"Server listening on {host}:{port}...")
 
     try:
         while True:
             conn, addr = server_socket.accept()
             print(f"Connected by {addr}")
-            
-            try:
-                message_json = receive.receive_json(conn)
-                print(f"\nReceived Message: {message_json}\n")
 
-                server_response = router(message_json, user_args, DB_CONN_POOL)
-                send.send_json(conn, server_response)
-                
-            except Exception as e:
-                print(f"Error handling data: {e}")
-            finally:
-                conn.close()
-                print(f"Connection with {addr} closed.\n")
-                
+            threading.Thread(
+                target=handle_client,
+                args=(conn, addr, user_args, DB_CONN_POOL),
+                daemon=True,
+            ).start()
+
     except KeyboardInterrupt:
         print("\nShutting down server.")
     finally:
