@@ -5,7 +5,6 @@ from mysql.connector import Error
 import socket
 import os
 from datetime import datetime
-from uuid import uuid4
 
 def update_results(payload, score, DB_CONN_POOL):
     """
@@ -88,7 +87,7 @@ def write_to_files(payload, user_args, score, file_extension, pc_id, DB_CONN_POO
                 print("MySQL connection returned to pool.")
 
     submission_file_name = (
-        f"{qid}_scored{score}_{datetime.now().time()}_{uuid4().hex}_{pc_id}."
+        f"{qid}_scored{score}_{datetime.now().time()}_{pc_id}."
         f"{file_extension}"
     )
 
