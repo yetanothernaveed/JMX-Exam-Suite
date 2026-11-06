@@ -5,6 +5,7 @@ from mysql.connector import Error
 import socket
 import os
 from datetime import datetime
+from uuid import uuid4
 
 def update_results(payload, score, DB_CONN_POOL):
     """
@@ -82,7 +83,10 @@ def write_to_files(payload, user_args, score, file_extension, DB_CONN_POOL):
             conn.close()
             print("MySQL connection returned to pool.")
 
-    submission_file_name = f"{qid}_{socket.gethostname()}_{datetime.now().time()}.{file_extension}"
+    submission_file_name = (
+        f"{qid}_{socket.gethostname()}_{datetime.now().time()}_{uuid4().hex}."
+        f"{file_extension}"
+    )
 
     if score >= max_score:
         best_dir = f"{student_folder}/best"
