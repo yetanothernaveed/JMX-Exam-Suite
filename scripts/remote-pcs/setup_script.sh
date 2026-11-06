@@ -280,6 +280,23 @@ sudo chmod 644 /home/examkiosk/.config/Code/User/keybindings.json
 sudo chattr +i /home/examkiosk/.config/Code/User/settings.json
 sudo chattr +i /home/examkiosk/.config/Code/User/keybindings.json
 
+echo ">>> [11.1] Restricting console login to sudo and labadmin groups..."
+# Add lab administrators with: usermod -aG labadmin <user>
+# getent group labadmin >/dev/null || groupadd labadmin
+
+PAM_LOGIN=/etc/pam.d/login
+if ! grep -q '^# JMX console login restriction' "$PAM_LOGIN"; then
+    sudo cp -a "$PAM_LOGIN" "${PAM_LOGIN}.jmx.bak"
+    sudo sed -i '/^@include common-auth/i\
+# JMX console login restriction: only sudo and labadmin may log in on a console\
+auth requisite pam_succeed_if.so user ingroup sudo:labadmin' "$PAM_LOGIN"
+fi
+
+if ! grep -q 'pam_succeed_if.so user ingroup sudo:labadmin' "$PAM_LOGIN"; then
+    echo "ERROR: failed to install the console login restriction in $PAM_LOGIN"
+    exit 1
+fi
+
 # ################################################################################# Disable for testing stage. Enable before final setup #################################################################################
 echo ">>> [Extra] Deleting all other desktop environments"
 sudo find /usr/share/xsessions/ -name "*.desktop" ! -name "exam.desktop" -delete
