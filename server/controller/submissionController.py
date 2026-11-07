@@ -126,7 +126,15 @@ def submit(payload, user_args, DB_CONN_POOL):
     questions_folder = user_args.get("questions_folder")
     file_extension = payload.get("filename").split(".")[-1].lower()
 
-    wrapper_file_path = f"{questions_folder}/{qid}/~wrapper/Main.{file_extension}"
+    wrapper_folder = f"{questions_folder}/{qid}/~wrapper"
+    preferred_wrapper = f"{wrapper_folder}/{qid}.{file_extension}"
+    # Newer questions name their wrapper after the question ID so the compiled
+    # source file matches a public class such as ``Q111``. Older questions keep
+    # using ``Main.<ext>``.
+    if os.path.exists(preferred_wrapper):
+        wrapper_file_path = preferred_wrapper
+    else:
+        wrapper_file_path = f"{wrapper_folder}/Main.{file_extension}"
     input_file_path = f"{questions_folder}/{qid}/~testcases/tc.in"
     output_file_path = f"{questions_folder}/{qid}/~testcases/tc.out"
     language = None

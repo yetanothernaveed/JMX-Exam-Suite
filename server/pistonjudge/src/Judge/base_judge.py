@@ -58,6 +58,11 @@ class BaseJudge(ABC):
     # Questions may override this dict when a language needs different limits.
     language_profiles = LANGUAGE_PROFILES
 
+    # Name of the file Piston uploads for the submission to read. Legacy
+    # function-style questions use ``input.in``; complete-program questions may
+    # use a different name such as ``input.txt``.
+    input_file_name = "input.in"
+
     # Optional per-case points. When None, every case is worth
     # ``MAX_SCORE / total_cases``. A question judge may set a sequence with one
     # value per test case; the values must sum to ``MAX_SCORE``.
@@ -106,6 +111,7 @@ class BaseJudge(ABC):
                 input_data=testcases.piston_input,
                 language=language,
                 limits=limits,
+                input_file_name=self.input_file_name,
             )
         except CompilationError as exc:
             return self._result(Verdict.COMPILATION_ERROR, 0.0, exc.details)

@@ -44,9 +44,14 @@ def run_local(
     extension = EXTENSIONS[args.language]
     submission_path = args.submission or question_dir / f"{question_dir.name}.{extension}"
 
+    wrapper_folder = question_dir / "~wrapper"
+    preferred_wrapper = wrapper_folder / f"{question_dir.name}.{extension}"
+    if not preferred_wrapper.exists():
+        preferred_wrapper = wrapper_folder / f"Main.{extension}"
+
     result = judge_class().submit(
         submission_code=submission_path.read_text(encoding="utf-8"),
-        wrapper_file_path=str(question_dir / "~wrapper" / f"Main.{extension}"),
+        wrapper_file_path=str(preferred_wrapper),
         input_file_path=str(question_dir / "~testcases" / "tc.in"),
         output_file_path=str(question_dir / "~testcases" / "tc.out"),
         language=args.language,

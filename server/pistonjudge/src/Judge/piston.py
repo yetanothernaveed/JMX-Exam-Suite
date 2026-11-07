@@ -153,6 +153,7 @@ def execute_submission(
     input_data: str,
     language: str,
     limits: RunLimits,
+    input_file_name: str = "input.in",
 ) -> RunResult:
     """Compile and run ``submission_code`` inside its wrapper on Piston.
 
@@ -181,12 +182,21 @@ def execute_submission(
         )
 
     code = wrapper_code.replace("/*SUBMISSION_CODE*/", submission_code, 1)
+
+    # Name the Piston source file after the wrapper template. Questions that
+    # use ``Main.<ext>`` keep the historical ``Main`` source name, while a
+    # question that supplies ``Q111.<ext>`` gets a ``Q111`` source file. This
+    # matters for Java, where a ``public class Q111`` must live in Q111.java.
+    source_name = Path(wrapper_file).stem
     payload = {
         "language": language,
         "version": "*",
         "files": [
-            {"name": "Main", "content": code},
-            {"name": "input.in", "content": input_data},
+            {"name": source_name, "content": code},
+            # Question wrappers or submissions open this file explicitly.
+            # Piston's stdin field is not used because it truncates large
+            # inputs, so test data is always delivered as a file.
+            {"name": input_file_name, "content": input_data},
         ],
         "run_timeout": limits.wall_timeout_ms,
         "run_cpu_timeout": limits.cpu_timeout_ms,

@@ -655,7 +655,7 @@ class TestSubmit(unittest.TestCase):
             judge = _ListJudge()
 
             with patch(
-                "Judge.base_judge.execute_submission",
+                "server.pistonjudge.src.Judge.base_judge.execute_submission",
                 side_effect=CompilationError("Main.java:1: error: bad code"),
             ):
                 result = judge.submit(
@@ -797,7 +797,38 @@ class TestPistonTransport(unittest.TestCase):
             self.assertEqual(result.memory_bytes, 1234)
             sent_payload = post.call_args.kwargs["json"]
             self.assertIn("class Q102 {}", sent_payload["files"][0]["content"])
+            self.assertEqual(sent_payload["files"][1]["name"], "input.in")
+            self.assertNotIn("stdin", sent_payload)
             self.assertEqual(sent_payload["run_memory_limit"], LIMITS.memory_limit_bytes)
+
+    def test_source_file_name_follows_wrapper_name(self):
+        with tempfile.TemporaryDirectory() as directory:
+            wrapper = Path(directory) / "Q111.java"
+            wrapper.write_text(
+                "public class Q111 {}\n/*SUBMISSION_CODE*/\n",
+                encoding="utf-8",
+            )
+            payload = {
+                "compile": {"code": 0},
+                "run": {"stdout": "", "stderr": "", "code": 0, "status": "AC"},
+            }
+
+            with patch("Judge.piston.requests.post") as post:
+                post.return_value = _FakeResponse(payload)
+                execute_submission(
+                    "code",
+                    str(wrapper),
+                    "1\n",
+                    "java",
+                    LIMITS,
+                    input_file_name="input.txt",
+                )
+
+            sent_payload = post.call_args.kwargs["json"]
+            self.assertEqual(sent_payload["files"][0]["name"], "Q111")
+            self.assertEqual(sent_payload["files"][1]["name"], "input.txt")
+            self.assertEqual(sent_payload["files"][1]["content"], "1\n")
+            self.assertNotIn("stdin", sent_payload)
 
     def test_compilation_failure_is_reported(self):
         with tempfile.TemporaryDirectory() as directory:
