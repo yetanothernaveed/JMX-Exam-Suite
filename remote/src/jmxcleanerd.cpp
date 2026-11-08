@@ -383,6 +383,29 @@ bool runCommand(const std::vector<std::string>& args) {
     return WIFEXITED(status) && WEXITSTATUS(status) == 0;
 }
 
+// SDDM does not respawn its greeter after logind terminates a session:
+// sddm-helper receives SIGHUP and exits with code 1, which SDDM treats as an
+// authentication failure. Restarting the display manager recovers the greeter
+// instead of leaving the kiosk on a black VT.
+bool restartDisplayManager() {
+    std::cout << "Restarting the display manager...\n";
+
+    // display-manager.service is the distro-independent alias. Fall back to
+    // the kiosk's SDDM unit when the alias is not installed.
+    if (runCommand({"systemctl", "restart", "display-manager.service"})) {
+        return true;
+    }
+
+    std::cerr << "display-manager.service restart failed; trying sddm.service.\n";
+    if (runCommand({"systemctl", "restart", "sddm.service"})) {
+        return true;
+    }
+
+    std::cerr << "Failed to restart the display manager; "
+                 "the kiosk may remain on a black screen.\n";
+    return false;
+}
+
 bool hasKioskProcessStartedBefore(uid_t uid, time_t boundary) {
     for (const KioskProcess& process : getKioskProcesses(uid)) {
         if (process.startTime < boundary) {
@@ -734,6 +757,9 @@ int main(int argc, char** argv) {
         std::cout << "Resetting kiosk for slot " << formatTime(slotStart) << "...\n";
         if (!shutdownKioskSession(*kioskUid, slotStart)) {
             std::cerr << "Failed to terminate the kiosk session; marker not updated.\n";
+            // The session may already be half torn down. Bring the display
+            // manager back so the kiosk is not left on a black screen.
+            restartDisplayManager();
             return 1;
         }
 
@@ -766,23 +792,36 @@ int main(int argc, char** argv) {
     }
 
     ArchiveResult archive = archiveExpiredWorkspace(slotStart);
+    bool sessionOk = removeSessionFile();
+    bool stateOk = clearVSCodeState();
+
+    bool markerOk = false;
+    if (archive.ok && sessionOk && stateOk) {
+        markerOk = writeMarker(slotStart);
+    }
+
+    // SDDM leaves a black VT after logind terminates a session. Restart the
+    // display manager so the next student gets a login screen even when the
+    // cleanup above partially failed.
+    bool displayOk = true;
+    if (activeSessionStart) {
+        displayOk = restartDisplayManager();
+    }
+
     if (!archive.ok) {
         std::cerr << "Workspace archive failed; marker not updated.\n";
-        return 1;
     }
-
-    if (!removeSessionFile()) {
+    if (!sessionOk) {
         std::cerr << "Failed to remove the session file; marker not updated.\n";
-        return 1;
     }
-
-    if (!clearVSCodeState()) {
+    if (!stateOk) {
         std::cerr << "Failed to clear all VS Code state; marker not updated.\n";
-        return 1;
+    }
+    if (!markerOk && archive.ok && sessionOk && stateOk) {
+        std::cerr << "Failed to record the handled slot; a later run will retry.\n";
     }
 
-    if (!writeMarker(slotStart)) {
-        std::cerr << "Failed to record the handled slot; a later run will retry.\n";
+    if (!archive.ok || !sessionOk || !stateOk || !markerOk || !displayOk) {
         return 1;
     }
 

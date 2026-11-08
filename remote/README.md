@@ -228,6 +228,9 @@ When a reset is allowed, the cleaner:
 5. Clears VS Code terminal/workspace state, local history, backups, caches,
    and `~/.bash_history`.
 6. Records the handled slot in `/var/lib/jmxcleanerd/last_handled_slot`.
+7. Restarts the display manager so SDDM returns to the login screen instead of
+   leaving a black VT. SDDM does not respawn its greeter after `loginctl`
+   terminates a session.
 
 The marker is a duplicate-run interlock, not a schedule: it prevents a
 second reset in the same slot from a manual or repeated invocation.
