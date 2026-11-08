@@ -309,13 +309,18 @@ namespace command_handler {
             return "ERROR: Malformed response from server";
         }
 
-        if (submissions.empty()) {
-            return response_message;
-        }
-
         const std::string folder_name = best_only ? "best-submissions" : "recent-submissions";
         const std::filesystem::path folder_path =
             std::filesystem::path(settings.workspace_directory) / folder_name;
+
+        std::string folder_error;
+        if (!exam_workspace_handler::reset_directory(folder_path, folder_error)) {
+            return "ERROR: Could not prepare submission folder: " + folder_error;
+        }
+
+        if (submissions.empty()) {
+            return response_message;
+        }
 
         std::string saved_files;
         try {
