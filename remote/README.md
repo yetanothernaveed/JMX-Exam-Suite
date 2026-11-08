@@ -199,7 +199,59 @@ To verify scheduling, run the following command:
 systemctl list-timers jmxcleanerd.timer
 ```
 
-To test immediately, run the following command:
+To test the archive path immediately, run the following command:
 ```
 sudo systemctl start jmxcleanerd.service
+```
+
+Starting the service manually does not bypass the slot boundary window; it will
+only reset the kiosk when invoked within 60 seconds of a slot boundary.
+
+## Slot-boundary kiosk reset
+
+`jmxcleanerd.timer` runs at the slot boundaries `00:00`, `08:00`, `11:00`,
+`14:00`, `17:00`, and `20:00` (plus once two minutes after boot). The timer
+does **not** catch up missed runs: a boundary that is missed because the
+machine was off or suspended is skipped rather than executed mid-slot.
+
+`jmxcleanerd.service` starts the binary with `--slot-reset`. A reset is only
+performed during the first 60 seconds after a slot boundary. Outside that
+window the binary archives expired workspace files but never terminates a
+session or wipes state.
+
+When a reset is allowed, the cleaner:
+
+1. Shuts down firejail sandboxes for `examkiosk`.
+2. Terminates the `examkiosk` login session with `loginctl`.
+3. Archives workspace files created before the current slot.
+4. Removes the stale `/run/jmx/sessions/current_session.txt`.
+5. Clears VS Code terminal/workspace state, local history, backups, caches,
+   and `~/.bash_history`.
+6. Records the handled slot in `/var/lib/jmxcleanerd/last_handled_slot`.
+
+The marker is a duplicate-run interlock, not a schedule: it prevents a
+second reset in the same slot from a manual or repeated invocation.
+
+Preserved across a reset:
+
+- `~/.config/Code/User/settings.json`
+- `~/.config/Code/User/keybindings.json`
+- `~/.config/Code/User/snippets/`
+- `~/.vscode/extensions/`
+
+The next login starts a fresh firejail sandbox through `exam-session.sh`.
+`exam-session.sh` also performs the same VS Code state cleanup before launch
+as a defense-in-depth guard.
+
+The default invocation archives only and never resets:
+
+```
+sudo /usr/local/bin/jmxcleanerd --archive-only
+```
+
+The timer's reset mode can be invoked manually, but it still obeys the
+60-second boundary window and the handled-slot marker:
+
+```
+sudo /usr/local/bin/jmxcleanerd --slot-reset
 ```

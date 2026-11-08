@@ -1,10 +1,13 @@
 [Unit]
-Description=Delete exam_workspace files and session older than current slot cutoff
-After=local-fs.target
+Description=Archive expired exam files and reset the kiosk at slot boundaries
+After=local-fs.target systemd-logind.service
 ConditionPathExists=/home/examkiosk/exam_workspace
 
 [Service]
 LogsDirectory=jmxcleanerd
+StateDirectory=jmxcleanerd
+StateDirectoryMode=0700
 
 Type=oneshot
-ExecStart=/usr/local/bin/jmxcleanerd
+TimeoutStartSec=120
+ExecStart=/usr/local/bin/jmxcleanerd --slot-reset

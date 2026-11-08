@@ -146,6 +146,11 @@ cat << 'EOF' > /tmp/vscode-settings.json
     "workbench.enableExperiments": false,
 
     "terminal.integrated.shellIntegration.enabled": false,
+    "terminal.integrated.enablePersistentSessions": false,
+    "terminal.integrated.persistentSessionReviveProcess": "never",
+    "files.hotExit": "off",
+    "workbench.localHistory.enabled": false,
+    "window.restoreWindows": "none",
     "terminal.integrated.defaultProfile.linux": "RestrictedBash",
     "terminal.integrated.automationProfile.linux": {
         "path": "/bin/bash",
@@ -184,6 +189,33 @@ DEST="/usr/local/bin/exam-session.sh"
 
 cat << 'EOF' > "$TMP_SCRIPT"
 #!/bin/bash
+
+KIOSK_HOME="/home/examkiosk"
+
+# Clear per-session VS Code state before the sandbox starts. This is a
+# defense-in-depth guard for boots, late timer runs, or a cleaner failure.
+# Keep this list in sync with clearVSCodeState() in remote/src/jmxcleanerd.cpp.
+rm -rf \
+  "$KIOSK_HOME/.config/Code/User/workspaceStorage" \
+  "$KIOSK_HOME/.config/Code/User/globalStorage" \
+  "$KIOSK_HOME/.config/Code/User/History" \
+  "$KIOSK_HOME/.config/Code/User/Backups" \
+  "$KIOSK_HOME/.config/Code/Backups" \
+  "$KIOSK_HOME/.config/Code/CachedData" \
+  "$KIOSK_HOME/.config/Code/CachedExtensionVSIXs" \
+  "$KIOSK_HOME/.config/Code/Code Cache" \
+  "$KIOSK_HOME/.config/Code/GPUCache" \
+  "$KIOSK_HOME/.config/Code/DawnGraphiteCache" \
+  "$KIOSK_HOME/.config/Code/DawnWebGPUCache" \
+  "$KIOSK_HOME/.config/Code/logs" \
+  "$KIOSK_HOME/.config/Code/Crashpad" \
+  "$KIOSK_HOME/.config/Code/Service Worker" \
+  "$KIOSK_HOME/.config/Code/Local Storage" \
+  "$KIOSK_HOME/.config/Code/Session Storage" \
+  "$KIOSK_HOME/.config/Code/IndexedDB" \
+  "$KIOSK_HOME/.config/Code/blob_storage" \
+  "$KIOSK_HOME/.config/Code/Network Persistent State" \
+  "$KIOSK_HOME/.bash_history" 2>/dev/null || true
 
 # Start Openbox window manager and wait for it to be ready
 openbox-session &
@@ -247,6 +279,11 @@ done
 cat << 'EOF' > /tmp/.restricted_bashrc
 # Set a clean, standard terminal prompt
 export PS1='examkiosk@kiosk:\W\$ '
+
+# Never read or write shell command history between sessions
+export HISTFILE=/dev/null
+export HISTSIZE=0
+export HISTFILESIZE=0
 
 # Restrict the PATH to ONLY our cherry-picked directory
 export PATH="/home/examkiosk/restricted_bin"
