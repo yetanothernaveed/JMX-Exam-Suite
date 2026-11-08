@@ -244,6 +244,120 @@ namespace command_handler {
         return "Successfully fetched questions and saved to exam workspace.";
     }
 
+    inline std::string handleGetSubmissions(const nlohmann::json& request, bool best_only) {
+        DaemonSettings settings;
+        SessionManager sessionManager;
+        if (!sessionManager.check_session_exists()) {
+            return "ERROR: No active session to fetch submissions";
+        }
+
+        std::string qid;
+        try {
+            qid = request.at("payload").at("qid").get<std::string>();
+        } catch (const std::exception&) {
+            return "ERROR: Missing question ID";
+        }
+
+        if (qid.empty()) {
+            return "ERROR: Missing question ID";
+        }
+
+        int serverFd = server::connectToServer();
+        if (serverFd < 0) {
+            return "ERROR: Failed to connect to server";
+        }
+
+        nlohmann::json message = {
+            {"action", best_only ? "get_best_submission" : "get_recent_submissions"},
+            {"payload", {
+                {"qid", qid},
+                {"student_id", sessionManager.get_student_id()}
+            }}
+        };
+
+        std::string response {};
+        nlohmann::json responseJson;
+
+        try {
+            jmx::sendMessage(serverFd, message.dump());
+
+            if (!jmx::recvMessage(serverFd, response)) {
+                return "ERROR: failed to receive response from server";
+            }
+
+            responseJson = nlohmann::json::parse(response);
+
+            if (responseJson["status"] == "ERROR") {
+                return std::string("ERROR: ") + responseJson["message"].get<std::string>();
+            }
+        } catch (const std::exception& e) {
+            return std::string("ERROR: Exception occurred while fetching submissions: ") + e.what();
+        }
+
+        std::string response_message = "Fetched submissions successfully.";
+        if (responseJson.contains("message") && responseJson["message"].is_string()) {
+            response_message = responseJson["message"].get<std::string>();
+        }
+
+        nlohmann::json submissions = nlohmann::json::array();
+        try {
+            const nlohmann::json& payload = responseJson.at("payload");
+            if (payload.contains("submissions") && payload["submissions"].is_array()) {
+                submissions = payload["submissions"];
+            }
+        } catch (const std::exception&) {
+            return "ERROR: Malformed response from server";
+        }
+
+        if (submissions.empty()) {
+            return response_message;
+        }
+
+        const std::string folder_name = best_only ? "best-submissions" : "recent-submissions";
+        const std::filesystem::path folder_path =
+            std::filesystem::path(settings.workspace_directory) / folder_name;
+
+        std::string saved_files;
+        try {
+            for (const auto& submission : submissions) {
+                const std::string filename = submission["filename"].get<std::string>();
+                const std::filesystem::path filename_path(filename);
+
+                // The server supplies the filename. Keep it a plain file name
+                // so a malformed response cannot write outside the folder.
+                if (filename.empty() || filename_path.filename() != filename_path) {
+                    return "ERROR: Server returned an invalid submission filename";
+                }
+
+                if (!exam_workspace_handler::write_file_to_directory(
+                        folder_path,
+                        filename,
+                        submission["content"].get<std::string>())) {
+                    return "ERROR: Failed to save submission to " + folder_path.string();
+                }
+
+                saved_files += "  - " + filename + "\n";
+            }
+        } catch (const std::exception& e) {
+            return std::string("ERROR: Exception occurred while saving submissions: ") + e.what();
+        }
+
+        std::string response_msg =
+            response_message + "\n" +
+            "Saved to: " + folder_path.string() + "\n" +
+            saved_files;
+
+        return response_msg;
+    }
+
+    inline std::string handleGetRecentSubmissions(const nlohmann::json& request) {
+        return handleGetSubmissions(request, false);
+    }
+
+    inline std::string handleGetBestSubmission(const nlohmann::json& request) {
+        return handleGetSubmissions(request, true);
+    }
+
     inline std::string handleGetStats() {
         SessionManager sessionManager;
         if (!sessionManager.check_session_exists()) {

@@ -52,6 +52,10 @@ namespace {
             return command_handler::handleGetQuestions();
         } else if (command == "get_stats") {
             return command_handler::handleGetStats();
+        } else if (command == "get_recent_submissions") {
+            return command_handler::handleGetRecentSubmissions(request);
+        } else if (command == "get_best_submission") {
+            return command_handler::handleGetBestSubmission(request);
         } else if (command == "submit") {
             return command_handler::handleSubmit(request);
         }
