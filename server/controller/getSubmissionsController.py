@@ -17,13 +17,17 @@ def _validate_request(payload, user_args):
 
     student_id = payload.get("student_id")
     qid = payload.get("qid")
-    responses_folder = user_args.get("responses_folder")
 
     if not isinstance(student_id, str) or not student_id.strip():
         return None, None, None, "Missing or invalid student_id in payload."
     if not isinstance(qid, str) or not qid.strip():
         return None, None, None, "Missing or invalid qid in payload."
-    if not isinstance(responses_folder, str) or not responses_folder:
+
+    responses_folder = user_args.get("responses_folder")
+    if not isinstance(responses_folder, (str, os.PathLike)):
+        return None, None, None, "Missing responses_folder in server arguments."
+    responses_folder = os.fspath(responses_folder)
+    if not responses_folder:
         return None, None, None, "Missing responses_folder in server arguments."
 
     student_id = student_id.strip()
