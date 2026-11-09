@@ -25,5 +25,5 @@ dist/
 *.egg-info/
 *.egg-info/
 service_account.json
-examplesetup/
+examplesetup/responses
 keys
