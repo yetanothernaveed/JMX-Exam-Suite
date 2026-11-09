@@ -52,6 +52,10 @@ namespace {
             return command_handler::handleGetQuestions();
         } else if (command == "get_stats") {
             return command_handler::handleGetStats();
+        } else if (command == "get_recent_submissions") {
+            return command_handler::handleGetRecentSubmissions(request);
+        } else if (command == "get_best_submission") {
+            return command_handler::handleGetBestSubmission(request);
         } else if (command == "submit") {
             return command_handler::handleSubmit(request);
         }
@@ -142,7 +146,16 @@ int main() {
                 close(clientFd);
                 continue;
             }
-            std::string response = handleCommands(request);
+            std::string response;
+            try {
+                response = handleCommands(request);
+            } catch (const std::exception& e) {
+                syslog(LOG_ERR, "command handler threw an exception: %s", e.what());
+                response = std::string("ERROR: Internal daemon error: ") + e.what();
+            } catch (...) {
+                syslog(LOG_ERR, "command handler threw an unknown exception");
+                response = "ERROR: Internal daemon error";
+            }
             jmx::sendMessage(clientFd, response);
         } else {
             syslog(LOG_WARNING, "malformed or oversized request, dropping connection");
