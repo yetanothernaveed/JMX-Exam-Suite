@@ -1,4 +1,5 @@
 from pistonjudge.src.Judge import judge
+from pistonjudge.src.Judge.verdicts import Verdict
 from utils import dynamic_loader
 
 from mysql.connector import Error
@@ -184,6 +185,17 @@ def submit(payload, user_args, DB_CONN_POOL):
 
     
     
+    if judge_output.get("verdict") == Verdict.FORBIDDEN_KEYWORD_ERROR:
+        return {
+            "status": "SUCCESS",
+            "message": "Submission rejected due to a forbidden keyword.",
+            "payload": {
+                "verdict": judge_output.get("verdict"),
+                "score": 0,
+                "details": judge_output.get("details", ""),
+            },
+        }
+
     if judge_output.get("verdict") == "UNKNOWN_ERROR" or judge_output.get("verdict") == "ERROR":
         return judge_output
 
