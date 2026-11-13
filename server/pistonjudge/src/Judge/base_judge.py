@@ -68,6 +68,23 @@ class BaseJudge(ABC):
     # value per test case; the values must sum to ``MAX_SCORE``.
     case_scores: Sequence[float] | None = None
 
+    # Optional words that may not appear in a submission. Matching is
+    # case-insensitive and applies to any substring, so ``"sort"`` also rejects
+    # ``"mergeSort"``. A question judge may set this sequence or pass
+    # ``banned_keywords`` to the constructor.
+    banned_keywords: Sequence[str] = ()
+
+    def __init__(self, banned_keywords: Sequence[str] | None = None) -> None:
+        if banned_keywords is not None:
+            self.banned_keywords = banned_keywords
+        if isinstance(self.banned_keywords, str):
+            self.banned_keywords = (self.banned_keywords,)
+        self.banned_keywords = tuple(
+            keyword.strip()
+            for keyword in self.banned_keywords
+            if isinstance(keyword, str) and keyword.strip()
+        )
+
     def submit(
         self,
         submission_code: str,
@@ -81,6 +98,16 @@ class BaseJudge(ABC):
         Infrastructure problems are returned as ``SYSTEM_ERROR`` results rather
         than raised, so the server always receives a complete verdict.
         """
+        banned = self._find_banned_keyword(submission_code or "")
+        if banned is not None:
+            keyword, line = banned
+            return self._result(
+                Verdict.FORBIDDEN_KEYWORD_ERROR,
+                0.0,
+                f"Submission rejected: banned keyword '{keyword}' found on "
+                f"line {line}.",
+            )
+
         try:
             limits = self.get_limits(language)
             testcases = load_testcases(input_file_path, output_file_path)
@@ -276,6 +303,16 @@ class BaseJudge(ABC):
                 f"case_scores must sum to {MAX_SCORE:g}, got {total:.2f}."
             )
         return scores
+
+    def _find_banned_keyword(self, code: str) -> tuple[str, int] | None:
+        """Return the first banned keyword in ``code`` and its line number."""
+        folded = code.casefold()
+        for keyword in self.banned_keywords:
+            index = folded.find(keyword.casefold())
+            if index != -1:
+                line = folded.count("\n", 0, index) + 1
+                return keyword, line
+        return None
 
     def parse_result(self, text: str) -> Any:
         """Parse one testcase result.
