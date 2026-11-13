@@ -671,6 +671,87 @@ class TestSubmit(unittest.TestCase):
         self.assertIn("bad code", result["details"])
 
 
+class _KeywordJudge(_ListJudge):
+    banned_keywords = ("sort",)
+
+
+class TestBannedKeywords(unittest.TestCase):
+    def _submit(self, judge, code):
+        with tempfile.TemporaryDirectory() as directory:
+            input_path, output_path = _write_cases(
+                directory,
+                "@@CASE-1\n1\n",
+                "@@CASE-1\n1\n",
+            )
+            with patch(
+                "server.pistonjudge.src.Judge.base_judge.execute_submission"
+            ) as execute:
+                result = judge.submit(
+                    code,
+                    "Main.py",
+                    input_path,
+                    output_path,
+                    "python",
+                )
+        return result, execute
+
+    def test_judges_without_banned_keywords_are_unrestricted(self):
+        judge = _ListJudge()
+
+        self.assertIsNone(judge._find_banned_keyword("def mergeSort(): pass"))
+
+    def test_banned_keyword_rejects_before_execution(self):
+        judge = _ListJudge(banned_keywords=["sort"])
+
+        result, execute = self._submit(judge, "def mergeSort(): pass\n")
+
+        self.assertEqual(result["verdict"], Verdict.FORBIDDEN_KEYWORD_ERROR)
+        self.assertEqual(result["score"], 0.0)
+        self.assertIn("'sort'", result["details"])
+        execute.assert_not_called()
+
+    def test_matching_is_case_insensitive_and_any_substring(self):
+        judge = _ListJudge(banned_keywords=["sort"])
+
+        for code in ("Sort", "SORT", "mergeSort", "ffajffjsortskjfls"):
+            with self.subTest(code=code):
+                result, execute = self._submit(judge, f"value = {code}\n")
+
+                self.assertEqual(result["verdict"], Verdict.FORBIDDEN_KEYWORD_ERROR)
+                execute.assert_not_called()
+
+    def test_keyword_configuration_is_case_insensitive(self):
+        judge = _ListJudge(banned_keywords=["SORT"])
+
+        self.assertEqual(judge._find_banned_keyword("mergeSort"), ("SORT", 1))
+
+    def test_first_matching_keyword_is_reported_with_its_line(self):
+        judge = _ListJudge(banned_keywords=["merge", "sort"])
+
+        self.assertEqual(
+            judge._find_banned_keyword("x = 1\ny = mergeSort\n"),
+            ("merge", 2),
+        )
+
+    def test_class_attribute_configures_keywords_without_arguments(self):
+        judge = _KeywordJudge()
+
+        self.assertEqual(judge.banned_keywords, ("sort",))
+        self.assertEqual(judge._find_banned_keyword("mergeSort"), ("sort", 1))
+
+    def test_constructor_overrides_class_attribute(self):
+        judge = _KeywordJudge(banned_keywords=["merge"])
+
+        self.assertEqual(judge.banned_keywords, ("merge",))
+        self.assertIsNone(judge._find_banned_keyword("def sort(): pass"))
+
+    def test_empty_keywords_are_ignored(self):
+        judge = _ListJudge(banned_keywords=["", "   "])
+
+        self.assertEqual(judge.banned_keywords, ())
+        self.assertIsNone(judge._find_banned_keyword("anything goes"))
+
+
 class TestCaseScores(unittest.TestCase):
     def setUp(self):
         self.judge = _ListJudge()
