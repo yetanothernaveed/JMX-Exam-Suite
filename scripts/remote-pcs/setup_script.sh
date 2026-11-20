@@ -280,10 +280,13 @@ cat << 'EOF' > /tmp/.restricted_bashrc
 # Set a clean, standard terminal prompt
 export PS1='examkiosk@kiosk:\W\$ '
 
-# Never read or write shell command history between sessions
+# Keep a per-terminal command history so Up/Down recall commands typed in
+# this shell. HISTFILE=/dev/null means nothing is read from or written to
+# disk, so a new terminal/session always starts with empty history.
 export HISTFILE=/dev/null
-export HISTSIZE=0
+export HISTSIZE=1000
 export HISTFILESIZE=0
+export HISTCONTROL=ignoredups
 
 # Restrict the PATH to ONLY our cherry-picked directory
 export PATH="/home/examkiosk/restricted_bin"
