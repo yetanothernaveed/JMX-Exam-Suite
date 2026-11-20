@@ -402,8 +402,9 @@ echo ">>> [14] Creating autologin configuration for examkiosk user... (Disabled)
 # SystemAccount=false
 # EOF
 
-echo ">>> [15] Installing login background..."
+echo ">>> [15] Installing boot and GRUB branding..."
 install_plymouth_branding
 install_login_background
+install_grub_branding
 
 echo ">>> Exam kiosk setup complete."

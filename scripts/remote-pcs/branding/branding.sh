@@ -122,3 +122,43 @@ EOF
 
     echo "✓ Custom boot screen installed."
 }
+
+################################################################################
+# GRUB configuration
+################################################################################
+
+GRUB_CONFIG_FILE="/etc/default/grub"
+GRUB_GENERATED_CONFIG="/boot/grub/grub.cfg"
+
+# Keep one pristine copy of the distro defaults before our edits.
+backup_grub_config() {
+    if [ ! -f "${GRUB_CONFIG_FILE}.jmx.bak" ]; then
+        sudo cp -a "$GRUB_CONFIG_FILE" "${GRUB_CONFIG_FILE}.jmx.bak"
+        echo "Backed up $GRUB_CONFIG_FILE to ${GRUB_CONFIG_FILE}.jmx.bak"
+    fi
+}
+
+# Set a KEY=value line in /etc/default/grub without disturbing other settings.
+# Handles commented-out keys (e.g. #GRUB_DISABLE_OS_PROBER=false) and appends
+# keys that are not present at all.
+set_grub_value() {
+    local key="$1"
+    local value="$2"
+
+    if sudo grep -qE "^[[:space:]]*#?[[:space:]]*${key}=" "$GRUB_CONFIG_FILE"; then
+        sudo sed -i -E "s|^[[:space:]]*#?[[:space:]]*${key}=.*|${key}=${value}|" "$GRUB_CONFIG_FILE"
+    else
+        printf '%s=%s\n' "$key" "$value" | sudo tee -a "$GRUB_CONFIG_FILE" >/dev/null
+    fi
+}
+
+install_grub_branding() {
+    backup_grub_config
+
+    # /etc/grub.d/10_linux takes the menu entry titles from GRUB_DISTRIBUTOR,
+    # so "Ubuntu" entries become "JMX OS" after the config is regenerated.
+    set_grub_value GRUB_DISTRIBUTOR '"JMX OS"'
+    sudo update-grub
+
+    echo "✓ GRUB menu entries renamed to JMX OS."
+}
