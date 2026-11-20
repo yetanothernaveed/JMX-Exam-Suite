@@ -166,6 +166,8 @@ def is_valid_bfs_order(graph: Graph, order: list[int]) -> bool:
 class Judge(BaseJudge):
     """Judge wrapper that parses graph metadata and validates BFS orders."""
 
+    banned_keywords = ["sort", "process", "thread"]
+
     # Q111 submissions are complete programs that read a provided input file.
     input_file_name = "input.txt"
 
