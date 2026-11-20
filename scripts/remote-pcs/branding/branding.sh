@@ -162,3 +162,43 @@ install_grub_branding() {
 
     echo "✓ GRUB menu entries renamed to JMX OS."
 }
+
+configure_grub_default_os() {
+    backup_grub_config
+
+    # os-prober is disabled by default on current Ubuntu, so Windows would not
+    # appear in the menu at all unless it is installed and explicitly enabled.
+    if ! command -v os-prober >/dev/null 2>&1; then
+        sudo apt-get install -y os-prober ||
+            echo "WARNING: could not install os-prober; Windows detection skipped"
+    fi
+    set_grub_value GRUB_DISABLE_OS_PROBER 'false'
+    sudo update-grub
+
+    # Target the generated entry id instead of a menu index: kernel updates
+    # change indices and titles, but the Windows prober id stays the same.
+    local windows_id
+    windows_id=$(
+        { sudo grep -i -m1 'menuentry.*windows' "$GRUB_GENERATED_CONFIG" || true; } |
+        sed -nE "s/.*\\\$menuentry_id_option '([^']+)'.*/\1/p"
+    )
+
+    if [ -n "$windows_id" ]; then
+        # GRUB_DEFAULT=saved has to be in grub.cfg before grub-set-default
+        # writes the chosen id to /boot/grub/grubenv.
+        set_grub_value GRUB_DEFAULT 'saved'
+        set_grub_value GRUB_SAVEDEFAULT 'false'
+        sudo update-grub
+        if sudo grub-set-default "$windows_id"; then
+            echo "✓ Windows is the default GRUB entry ($windows_id)."
+        else
+            echo "WARNING: could not save Windows as the GRUB default entry"
+        fi
+    else
+        # Clear a saved entry left over from a Windows install that is gone.
+        set_grub_value GRUB_DEFAULT '0'
+        sudo grub-editenv /boot/grub/grubenv unset saved_entry 2>/dev/null || true
+        sudo update-grub
+        echo "No Windows entry found; keeping the first GRUB entry as default."
+    fi
+}

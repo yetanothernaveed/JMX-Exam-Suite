@@ -407,4 +407,7 @@ install_plymouth_branding
 install_login_background
 install_grub_branding
 
+echo ">>> [15.1] Configuring GRUB default OS..."
+configure_grub_default_os
+
 echo ">>> Exam kiosk setup complete."
