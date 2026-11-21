@@ -123,11 +123,11 @@ sudo -u examkiosk code --install-extension ms-vscode.cpptools
 
 echo ">>> [7] Writing golden VS Code settings and keybindings..."
 
-# The effective config is copied from this root-owned directory into a fresh,
-# disposable VS Code user-data dir on every login (see exam-session.sh below).
-# Keeping the golden files outside the kiosk user's writable tree means VS Code
-# can always perform its atomic settings writes in the session copy without
-# producing permission errors, while no change can persist across sessions.
+# The effective config is copied from this root-owned directory into VS Code's
+# default user-settings path (~/.config/Code/User) on every login (see
+# exam-session.sh below). The live files are writable, so VS Code's atomic
+# writes succeed without error popups, while a watchdog restores the golden
+# content if anyone changes it.
 sudo install -d -o root -g root -m 0755 /etc/jmx/vscode
 for golden in /etc/jmx/vscode /etc/jmx/vscode/settings.json /etc/jmx/vscode/keybindings.json; do
   if [ -e "$golden" ]; then
@@ -202,6 +202,11 @@ cat << 'EOF' > /tmp/vscode-keybindings.json
 EOF
 sudo install -o root -g root -m 0644 /tmp/vscode-keybindings.json /etc/jmx/vscode/keybindings.json
 
+# Seed the live user-settings path too, so the machine is locked down
+# immediately rather than only after the next exam-session.sh run.
+sudo install -o examkiosk -g examkiosk -m 0644 /etc/jmx/vscode/settings.json /home/examkiosk/.config/Code/User/settings.json
+sudo install -o examkiosk -g examkiosk -m 0644 /etc/jmx/vscode/keybindings.json /home/examkiosk/.config/Code/User/keybindings.json
+
 
 echo ">>> [8] Writing exam session launch script..."
 TMP_SCRIPT="/tmp/exam-session.sh"
@@ -212,14 +217,13 @@ cat << 'EOF' > "$TMP_SCRIPT"
 
 KIOSK_HOME="/home/examkiosk"
 GOLDEN_CONFIG="/etc/jmx/vscode"
-VSCODE_USER_DATA="$KIOSK_HOME/.config/CodeSession"
+VSCODE_USER_DIR="$KIOSK_HOME/.config/Code/User"
 
 # Clear per-session VS Code state before the sandbox starts. This is a
 # defense-in-depth guard for boots, late timer runs, or a cleaner failure.
-# The legacy ~/.config/Code paths below are kept for machines upgraded from
-# the old layout. Keep this list in sync with clearVSCodeState() in
-# remote/src/jmxcleanerd.cpp. The active user-data dir is recreated below, so
-# nothing from a previous session can survive there.
+# Keep this list in sync with clearVSCodeState() in remote/src/jmxcleanerd.cpp.
+# The settings/keybindings themselves are recreated from the golden files
+# below, so nothing from a previous session can survive there.
 rm -rf \
   "$KIOSK_HOME/.config/Code/User/workspaceStorage" \
   "$KIOSK_HOME/.config/Code/User/globalStorage" \
@@ -242,35 +246,32 @@ rm -rf \
   "$KIOSK_HOME/.config/Code/Network Persistent State" \
   "$KIOSK_HOME/.bash_history" 2>/dev/null || true
 
-# Recreate a writable, disposable VS Code user-data dir from the root-owned
-# golden config. Atomic settings writes now succeed in this copy (no permission
-# error popups), but nothing persists: the next login rebuilds it from
-# /etc/jmx/vscode.
+# Recreate the golden settings at VS Code's default user-settings path.
+# VS Code always reads ~/.config/Code/User/settings.json, so keep the live
+# files there. They are plain writable files (no immutable flag), which means
+# the Java extension's atomic writes succeed without error popups; the watchdog
+# below restores the golden content if anything changes it.
 for name in settings.json keybindings.json; do
   if [ ! -r "$GOLDEN_CONFIG/$name" ]; then
     echo "exam-session: missing golden config $GOLDEN_CONFIG/$name" >&2
     exit 1
   fi
 done
-rm -rf "$VSCODE_USER_DATA"
-mkdir -p "$VSCODE_USER_DATA/User"
-cp "$GOLDEN_CONFIG/settings.json" "$VSCODE_USER_DATA/User/settings.json"
-cp "$GOLDEN_CONFIG/keybindings.json" "$VSCODE_USER_DATA/User/keybindings.json"
-if [ -d "$KIOSK_HOME/.config/Code/User/snippets" ]; then
-  cp -a "$KIOSK_HOME/.config/Code/User/snippets" "$VSCODE_USER_DATA/User/" 2>/dev/null || true
-fi
-chown -R examkiosk:examkiosk "$VSCODE_USER_DATA" 2>/dev/null || true
-chmod -R u+rwX "$VSCODE_USER_DATA" 2>/dev/null || true
+mkdir -p "$VSCODE_USER_DIR"
+cp "$GOLDEN_CONFIG/settings.json" "$VSCODE_USER_DIR/settings.json"
+cp "$GOLDEN_CONFIG/keybindings.json" "$VSCODE_USER_DIR/keybindings.json"
+chown -R examkiosk:examkiosk "$VSCODE_USER_DIR" 2>/dev/null || true
+chmod -R u+rwX "$VSCODE_USER_DIR" 2>/dev/null || true
 
 # Guard against in-session tampering. VS Code's own writes still succeed; they
 # are simply reverted, so no error notifications are produced.
 restore_golden_config() {
   while true; do
     for name in settings.json keybindings.json; do
-      if ! cmp -s "$GOLDEN_CONFIG/$name" "$VSCODE_USER_DATA/User/$name"; then
+      if ! cmp -s "$GOLDEN_CONFIG/$name" "$VSCODE_USER_DIR/$name"; then
         # Restore atomically so VS Code never observes a partially written file.
-        cp "$GOLDEN_CONFIG/$name" "$VSCODE_USER_DATA/User/$name.jmx-restore" 2>/dev/null || continue
-        mv -f "$VSCODE_USER_DATA/User/$name.jmx-restore" "$VSCODE_USER_DATA/User/$name" 2>/dev/null || true
+        cp "$GOLDEN_CONFIG/$name" "$VSCODE_USER_DIR/$name.jmx-restore" 2>/dev/null || continue
+        mv -f "$VSCODE_USER_DIR/$name.jmx-restore" "$VSCODE_USER_DIR/$name" 2>/dev/null || true
       fi
     done
     sleep 1
@@ -325,16 +326,12 @@ firejail --net=none \
   --whitelist=/home/examkiosk/exam_workspace \
   --whitelist=/home/examkiosk/.vscode/extensions \
   --whitelist=/home/examkiosk/.config/Code \
-  --whitelist="$VSCODE_USER_DATA" \
   --whitelist=/home/examkiosk/.bashrc \
   --whitelist=/home/examkiosk/.restricted_bashrc \
   --whitelist=/home/examkiosk/restricted_bin \
   --whitelist=/run/jmx \
   --ignore=nogroups \
-  code --disable-gpu \
-    --user-data-dir="$VSCODE_USER_DATA" \
-    --extensions-dir=/home/examkiosk/.vscode/extensions \
-    --wait /home/examkiosk/exam_workspace
+  code --disable-gpu --wait /home/examkiosk/exam_workspace
 
 # When VS Code is closed, stop the guard, compositor and Openbox, then log out
 kill $GUARD_PID 2>/dev/null || true
@@ -410,8 +407,8 @@ echo ">>> [11] Locking down permissions..."
 # The settings files are no longer made immutable in place. Immutable files
 # caused VS Code's atomic writes to fail, which surfaced as error popups. The
 # golden copies in /etc/jmx/vscode are root-owned and read-only to examkiosk;
-# exam-session.sh copies them into a per-session user-data dir that is always
-# writable and always discarded.
+# exam-session.sh copies them into the default user-settings path as plain
+# writable files that are restored if modified.
 # Clear an immutable flag if one was set manually on the golden files so this
 # step also succeeds on a machine that has been provisioned before.
 for golden in /etc/jmx/vscode/settings.json /etc/jmx/vscode/keybindings.json; do

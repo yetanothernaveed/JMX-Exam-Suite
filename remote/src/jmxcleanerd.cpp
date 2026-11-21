@@ -539,9 +539,9 @@ bool removeSessionFile() {
     return true;
 }
 
-// Keep this list in sync with the legacy cleanup guard in exam-session.sh.
-// The active user-data dir (~/.config/CodeSession) is rebuilt from
-// /etc/jmx/vscode on every login, so it does not need to be cleared here.
+// Keep this list in sync with the cleanup guard in exam-session.sh.
+// The settings/keybindings files themselves are rebuilt from /etc/jmx/vscode
+// on every login, so they are deliberately not cleared here.
 bool clearVSCodeState() {
     const std::vector<fs::path> paths = {
         KIOSK_HOME / ".config/Code/User/workspaceStorage",

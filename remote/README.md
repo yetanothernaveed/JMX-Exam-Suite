@@ -242,16 +242,15 @@ Preserved across a reset:
 - `~/.config/Code/User/snippets/`
 - `~/.vscode/extensions/`
 
-The effective VS Code user-data dir is `~/.config/CodeSession`. It is rebuilt
-from the golden config on every login by `exam-session.sh`, so settings and
-keybindings changed during an exam never persist and VS Code's atomic settings
-writes cannot produce permission errors. The old immutable files under
-`~/.config/Code/User/` are removed during provisioning and are no longer used.
+The live `~/.config/Code/User/settings.json` and `keybindings.json` are copied
+from the golden config on every login by `exam-session.sh`. They are ordinary
+writable files (no immutable flag), so VS Code's atomic settings writes cannot
+produce permission errors, and a watchdog restores them if they are modified.
+Settings and keybindings changed during an exam are therefore discarded.
 
 The next login starts a fresh firejail sandbox through `exam-session.sh`.
 `exam-session.sh` also performs the same VS Code state cleanup before launch
-as a defense-in-depth guard, and runs a watchdog that restores the golden
-settings/keybindings if they are modified during a session.
+as a defense-in-depth guard.
 
 The default invocation archives only and never resets:
 
