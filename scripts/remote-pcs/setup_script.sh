@@ -162,6 +162,16 @@ cat << 'EOF' > /tmp/vscode-settings.json
     "workbench.startupEditor": "none",
     "workbench.welcomePage.configured": true,
     "workbench.enableExperiments": false,
+    "workbench.tips.enabled": false,
+    "update.showReleaseNotes": false,
+    "extensions.ignoreRecommendations": true,
+    "extensions.autoCheckUpdates": false,
+    "task.allowAutomaticTasks": "off",
+    "debug.internalConsoleOptions": "neverOpen",
+    "debug.openDebug": "neverOpen",
+    "git.enabled": false,
+    "editor.minimap.enabled": false,
+    "editor.renderWhitespace": "none",
 
     "terminal.integrated.shellIntegration.enabled": false,
     "terminal.integrated.enablePersistentSessions": false,
@@ -197,7 +207,14 @@ cat << 'EOF' > /tmp/vscode-keybindings.json
     { "key": "ctrl+shift+p", "command": "-workbench.action.showCommands" },
     { "key": "f1", "command": "-workbench.action.showCommands" },
     { "key": "ctrl+,", "command": "-workbench.action.openSettings" },
-    { "key": "ctrl+k ctrl+s", "command": "-workbench.action.openGlobalKeybindings" }
+    { "key": "ctrl+k ctrl+s", "command": "-workbench.action.openGlobalKeybindings" },
+    { "key": "ctrl+r", "command": "-workbench.action.openRecent" },
+    { "key": "f11", "command": "-workbench.action.toggleFullScreen" },
+    { "key": "ctrl+shift+i", "command": "-workbench.action.toggleDevTools" },
+    { "key": "ctrl+shift+x", "command": "-workbench.view.extensions" },
+    { "key": "ctrl+shift+d", "command": "-workbench.view.debug" },
+    { "key": "f5", "command": "-workbench.action.debug.start" },
+    { "key": "ctrl+shift+p", "command": "-workbench.action.tasks.runTask" }
 ]
 EOF
 sudo install -o root -g root -m 0644 /tmp/vscode-keybindings.json /etc/jmx/vscode/keybindings.json
@@ -360,7 +377,12 @@ sudo mv "$TMP_DESKTOP" "$DEST_DESKTOP"
 sudo mkdir -p /home/examkiosk/.config/openbox
 sudo cp "$SCRIPT_DIR/rc.xml" /home/examkiosk/.config/openbox/
 
-sudo chown -R examkiosk:examkiosk /home/examkiosk/.config/openbox
+# Lock the window-manager config. This file controls the no-minimize/no-close
+# titlebar rules, so examkiosk must only be able to read it. The directory is
+# also root-owned: a writable directory would allow unlink/replace of rc.xml.
+sudo chown -R root:root /home/examkiosk/.config/openbox
+sudo chmod 0755 /home/examkiosk/.config/openbox
+sudo chmod 0644 /home/examkiosk/.config/openbox/rc.xml
 
 echo ">>> [10] Setting up restricted terminal..."
 sudo mkdir -p /home/examkiosk/restricted_bin
