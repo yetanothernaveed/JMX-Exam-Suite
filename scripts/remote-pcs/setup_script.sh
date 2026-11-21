@@ -97,6 +97,18 @@ sudo usermod -aG jmx examkiosk
 sudo systemctl restart jmxd.service || true
 
 echo ">>> [6] Setting up VS Code config directories and installing extensions..."
+# Older provisioning left immutable settings/keybindings in the user's tree.
+# Clear the flag and remove them BEFORE any recursive chown/chmod: otherwise
+# re-running this script on an already set-up machine fails with EPERM here,
+# before step [11] gets a chance to clean them up.
+for legacy in /home/examkiosk/.config/Code/User/settings.json \
+              /home/examkiosk/.config/Code/User/keybindings.json; do
+  if [ -e "$legacy" ]; then
+    sudo chattr -i "$legacy" 2>/dev/null || true
+    sudo rm -f "$legacy"
+  fi
+done
+
 sudo mkdir -p /home/examkiosk/.config/Code/User
 sudo mkdir -p /home/examkiosk/.vscode
 sudo chown -R examkiosk:examkiosk /home/examkiosk/.vscode
@@ -117,6 +129,11 @@ echo ">>> [7] Writing golden VS Code settings and keybindings..."
 # can always perform its atomic settings writes in the session copy without
 # producing permission errors, while no change can persist across sessions.
 sudo install -d -o root -g root -m 0755 /etc/jmx/vscode
+for golden in /etc/jmx/vscode /etc/jmx/vscode/settings.json /etc/jmx/vscode/keybindings.json; do
+  if [ -e "$golden" ]; then
+    sudo chattr -i "$golden" 2>/dev/null || true
+  fi
+done
 
 # 1. Write settings.json (Added UI lockdown settings and fixed missing comma)
 cat << 'EOF' > /tmp/vscode-settings.json
@@ -395,18 +412,15 @@ echo ">>> [11] Locking down permissions..."
 # golden copies in /etc/jmx/vscode are root-owned and read-only to examkiosk;
 # exam-session.sh copies them into a per-session user-data dir that is always
 # writable and always discarded.
-sudo chmod 0755 /etc/jmx/vscode
-sudo chmod 0644 /etc/jmx/vscode/settings.json /etc/jmx/vscode/keybindings.json
-
-# Remove any legacy in-place settings files left by an older provisioning.
-# Clear the immutable flag first so re-provisioning stays idempotent.
-for legacy in /home/examkiosk/.config/Code/User/settings.json \
-              /home/examkiosk/.config/Code/User/keybindings.json; do
-  if [ -f "$legacy" ]; then
-    sudo chattr -i "$legacy" 2>/dev/null || true
-    sudo rm -f "$legacy"
+# Clear an immutable flag if one was set manually on the golden files so this
+# step also succeeds on a machine that has been provisioned before.
+for golden in /etc/jmx/vscode/settings.json /etc/jmx/vscode/keybindings.json; do
+  if [ -e "$golden" ]; then
+    sudo chattr -i "$golden" 2>/dev/null || true
   fi
 done
+sudo chmod 0755 /etc/jmx/vscode
+sudo chmod 0644 /etc/jmx/vscode/settings.json /etc/jmx/vscode/keybindings.json
 
 # Clear stuck session backups causing the unsaved changes prompt (legacy dir)
 sudo rm -rf /home/examkiosk/.config/Code/User/Backups/* 2>/dev/null || true
