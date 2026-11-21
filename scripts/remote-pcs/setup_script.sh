@@ -18,7 +18,8 @@ source branding/branding.sh
 
 echo ">>> [2] Installing system dependencies..."
 sudo apt update
-sudo apt install -y build-essential python3 openjdk-21-jdk openbox firejail sqlite3 libsqlite3-dev ca-certificates curl gnupg
+sudo apt install -y build-essential python3 openjdk-21-jdk openbox firejail sqlite3 libsqlite3-dev ca-certificates curl gnupg \
+  xdotool wmctrl x11-xserver-utils picom
 
 echo ">>> [2.1] Writing JMX daemon configuration..."
 sudo install -d -m 0755 /etc/jmxd
@@ -222,7 +223,43 @@ openbox-session &
 OPENBOX_PID=$!
 sleep 2
 
-# Launch VS Code inside Firejail
+# X11 does not repaint exposed parts of the root window by itself. With a bare
+# Openbox session and no compositor, dragging a window leaves a trail of stale
+# pixels behind it. Paint the root and run a lightweight compositor to fix it.
+xsetroot -solid '#000000' 2>/dev/null || true
+picom -b --backend xrender 2>/dev/null || true
+
+# Use the monitor's preferred mode where possible so fullscreen geometry is
+# correct across different resolutions.
+xrandr --auto 2>/dev/null || true
+
+# VS Code does not support --kiosk: it is an Electron/Chromium switch that VS
+# Code never turns into a kiosk BrowserWindow on Linux, so the window opens at
+# its default/restored size. Enforce EWMH fullscreen after the window appears;
+# unlike hardcoded geometry this adapts to any screen resolution/DPI.
+force_fullscreen() {
+  local wid="" hex_wid="" i
+  for i in $(seq 1 20); do
+    wid="$(xdotool search --onlyvisible --class '[Cc]ode' 2>/dev/null | head -n1)"
+    if [ -n "$wid" ]; then
+      # xdotool prints decimal IDs; wmctrl -i expects a 0x-prefixed hex ID.
+      hex_wid="$(printf '0x%x' "$wid")"
+      xdotool windowmove "$wid" 0 0 2>/dev/null || true
+      xdotool windowsize "$wid" 100% 100% 2>/dev/null || true
+      wmctrl -i -r "$hex_wid" -b add,fullscreen 2>/dev/null || true
+      return 0
+    fi
+    sleep 0.5
+  done
+  echo "exam-session: could not find the VS Code window to make fullscreen" >&2
+  return 1
+}
+# code --wait blocks until the editor exits, so the enforcer must run in
+# parallel and retry while the window is being created.
+force_fullscreen &
+
+# Launch VS Code inside Firejail. --disable-gpu is a supported VS Code flag and
+# avoids Electron GPU artifacts on top of the X11 redraw fix above.
 firejail --net=none \
   --whitelist=/home/examkiosk/exam_workspace \
   --whitelist=/home/examkiosk/.vscode/extensions \
@@ -232,9 +269,10 @@ firejail --net=none \
   --whitelist=/home/examkiosk/restricted_bin \
   --whitelist=/run/jmx \
   --ignore=nogroups \
-  code --kiosk --wait /home/examkiosk/exam_workspace
+  code --disable-gpu --wait /home/examkiosk/exam_workspace
 
-# When VS Code is closed, kill Openbox and log out
+# When VS Code is closed, kill the compositor and Openbox, then log out
+pkill -u examkiosk -x picom 2>/dev/null || true
 kill $OPENBOX_PID
 killall openbox 2>/dev/null || true
 EOF
@@ -257,7 +295,7 @@ EOF
 sudo mv "$TMP_DESKTOP" "$DEST_DESKTOP"
 
 sudo mkdir -p /home/examkiosk/.config/openbox
-sudo cp rc.xml /home/examkiosk/.config/openbox/
+sudo cp "$SCRIPT_DIR/rc.xml" /home/examkiosk/.config/openbox/
 
 sudo chown -R examkiosk:examkiosk /home/examkiosk/.config/openbox
 

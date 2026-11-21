@@ -213,19 +213,11 @@
     <mousebind button="A-Left" action="Click">
       <action name="Unshade"/>
     </mousebind>
-    <mousebind button="A-Left" action="Drag">
-      <action name="Move"/>
-    </mousebind>
-
     <mousebind button="A-Right" action="Press">
       <action name="Focus"/>
       <action name="Raise"/>
       <action name="Unshade"/>
     </mousebind>
-    <mousebind button="A-Right" action="Drag">
-      <action name="Resize"/>
-    </mousebind> 
-
     <mousebind button="A-Middle" action="Press">
       <action name="Lower"/>
       <action name="FocusToBottom"/>
@@ -253,9 +245,6 @@
   </context>
 
   <context name="Titlebar">
-    <mousebind button="Left" action="Drag">
-      <action name="Move"/>
-    </mousebind>
     <mousebind button="Left" action="DoubleClick">
       <action name="ToggleMaximize"/>
     </mousebind>
@@ -302,29 +291,7 @@
     </mousebind>
   </context>
 
-  <context name="Top">
-    <mousebind button="Left" action="Drag">
-      <action name="Resize"><edge>top</edge></action>
-    </mousebind>
-  </context>
-
-  <context name="Left">
-    <mousebind button="Left" action="Drag">
-      <action name="Resize"><edge>left</edge></action>
-    </mousebind>
-  </context>
-
-  <context name="Right">
-    <mousebind button="Left" action="Drag">
-      <action name="Resize"><edge>right</edge></action>
-    </mousebind>
-  </context>
-
   <context name="Bottom">
-    <mousebind button="Left" action="Drag">
-      <action name="Resize"><edge>bottom</edge></action>
-    </mousebind>
-
     <mousebind button="Right" action="Press">
       <action name="Focus"/>
       <action name="Raise"/>
@@ -337,9 +304,6 @@
       <action name="Focus"/>
       <action name="Raise"/>
       <action name="Unshade"/>
-    </mousebind>
-    <mousebind button="Left" action="Drag">
-      <action name="Resize"/>
     </mousebind>
   </context>
 
@@ -613,10 +577,35 @@
   # end of the example
 -->
 
-  <application class="Code">
-    <maximized>true</maximized>
+  <application name="code" class="Code">
     <fullscreen>yes</fullscreen>
     <decor>no</decor>
+    <position force="yes">
+      <x>0</x>
+      <y>0</y>
+    </position>
+    <size>
+      <width>100%</width>
+      <height>100%</height>
+    </size>
+    <layer>above</layer>
+    <focus>yes</focus>
+  </application>
+
+  <!-- Some builds report a lowercase WM_CLASS. -->
+  <application name="code" class="code">
+    <fullscreen>yes</fullscreen>
+    <decor>no</decor>
+    <position force="yes">
+      <x>0</x>
+      <y>0</y>
+    </position>
+    <size>
+      <width>100%</width>
+      <height>100%</height>
+    </size>
+    <layer>above</layer>
+    <focus>yes</focus>
   </application>
 
 </applications>
