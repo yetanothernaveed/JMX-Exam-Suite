@@ -150,6 +150,7 @@ cat << 'EOF' > /tmp/vscode-settings.json
     "window.menuBarVisibility": "none",
     "window.commandCenter": false,
     "workbench.layoutControl.enabled": false,
+    "workbench.secondarySideBar.defaultVisibility": "hidden",
     "security.workspace.trust.enabled": false,
     "chat.disableAIFeatures": true,
     "github.copilot.enable": {
@@ -214,7 +215,8 @@ cat << 'EOF' > /tmp/vscode-keybindings.json
     { "key": "ctrl+shift+x", "command": "-workbench.view.extensions" },
     { "key": "ctrl+shift+d", "command": "-workbench.view.debug" },
     { "key": "f5", "command": "-workbench.action.debug.start" },
-    { "key": "ctrl+shift+p", "command": "-workbench.action.tasks.runTask" }
+    { "key": "ctrl+shift+p", "command": "-workbench.action.tasks.runTask" },
+    { "key": "ctrl+alt+b", "command": "-workbench.action.toggleAuxiliaryBar" }
 ]
 EOF
 sudo install -o root -g root -m 0644 /tmp/vscode-keybindings.json /etc/jmx/vscode/keybindings.json
