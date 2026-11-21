@@ -97,13 +97,6 @@ sudo usermod -aG jmx examkiosk
 sudo systemctl restart jmxd.service || true
 
 echo ">>> [6] Setting up VS Code config directories and installing extensions..."
-if [ -f /home/examkiosk/.config/Code/User/settings.json ]; then
-    sudo chattr -i /home/examkiosk/.config/Code/User/settings.json
-fi
-if [ -f /home/examkiosk/.config/Code/User/keybindings.json ]; then
-    sudo chattr -i /home/examkiosk/.config/Code/User/keybindings.json
-fi
-
 sudo mkdir -p /home/examkiosk/.config/Code/User
 sudo mkdir -p /home/examkiosk/.vscode
 sudo chown -R examkiosk:examkiosk /home/examkiosk/.vscode
@@ -116,7 +109,14 @@ sudo -u examkiosk code --install-extension vscjava.vscode-java-pack
 sudo -u examkiosk code --install-extension ms-python.python
 sudo -u examkiosk code --install-extension ms-vscode.cpptools
 
-echo ">>> [7] Writing VS Code settings and keybindings..."
+echo ">>> [7] Writing golden VS Code settings and keybindings..."
+
+# The effective config is copied from this root-owned directory into a fresh,
+# disposable VS Code user-data dir on every login (see exam-session.sh below).
+# Keeping the golden files outside the kiosk user's writable tree means VS Code
+# can always perform its atomic settings writes in the session copy without
+# producing permission errors, while no change can persist across sessions.
+sudo install -d -o root -g root -m 0755 /etc/jmx/vscode
 
 # 1. Write settings.json (Added UI lockdown settings and fixed missing comma)
 cat << 'EOF' > /tmp/vscode-settings.json
@@ -169,19 +169,21 @@ cat << 'EOF' > /tmp/vscode-settings.json
     }
 }
 EOF
-sudo mv /tmp/vscode-settings.json /home/examkiosk/.config/Code/User/settings.json
+sudo install -o root -g root -m 0644 /tmp/vscode-settings.json /etc/jmx/vscode/settings.json
 
-# 2. Write keybindings.json to disable folder/workspace commands
+# 2. Write keybindings.json to disable folder/workspace/settings commands
 cat << 'EOF' > /tmp/vscode-keybindings.json
 [
     { "key": "ctrl+k ctrl+o", "command": "-workbench.action.files.openFolder" },
     { "key": "ctrl+o", "command": "-workbench.action.files.openFileFolder" },
     { "key": "ctrl+o", "command": "-workbench.action.files.openFile" },
     { "key": "ctrl+shift+p", "command": "-workbench.action.showCommands" },
-    { "key": "f1", "command": "-workbench.action.showCommands" }
+    { "key": "f1", "command": "-workbench.action.showCommands" },
+    { "key": "ctrl+,", "command": "-workbench.action.openSettings" },
+    { "key": "ctrl+k ctrl+s", "command": "-workbench.action.openGlobalKeybindings" }
 ]
 EOF
-sudo mv /tmp/vscode-keybindings.json /home/examkiosk/.config/Code/User/keybindings.json
+sudo install -o root -g root -m 0644 /tmp/vscode-keybindings.json /etc/jmx/vscode/keybindings.json
 
 
 echo ">>> [8] Writing exam session launch script..."
@@ -192,10 +194,15 @@ cat << 'EOF' > "$TMP_SCRIPT"
 #!/bin/bash
 
 KIOSK_HOME="/home/examkiosk"
+GOLDEN_CONFIG="/etc/jmx/vscode"
+VSCODE_USER_DATA="$KIOSK_HOME/.config/CodeSession"
 
 # Clear per-session VS Code state before the sandbox starts. This is a
 # defense-in-depth guard for boots, late timer runs, or a cleaner failure.
-# Keep this list in sync with clearVSCodeState() in remote/src/jmxcleanerd.cpp.
+# The legacy ~/.config/Code paths below are kept for machines upgraded from
+# the old layout. Keep this list in sync with clearVSCodeState() in
+# remote/src/jmxcleanerd.cpp. The active user-data dir is recreated below, so
+# nothing from a previous session can survive there.
 rm -rf \
   "$KIOSK_HOME/.config/Code/User/workspaceStorage" \
   "$KIOSK_HOME/.config/Code/User/globalStorage" \
@@ -217,6 +224,43 @@ rm -rf \
   "$KIOSK_HOME/.config/Code/blob_storage" \
   "$KIOSK_HOME/.config/Code/Network Persistent State" \
   "$KIOSK_HOME/.bash_history" 2>/dev/null || true
+
+# Recreate a writable, disposable VS Code user-data dir from the root-owned
+# golden config. Atomic settings writes now succeed in this copy (no permission
+# error popups), but nothing persists: the next login rebuilds it from
+# /etc/jmx/vscode.
+for name in settings.json keybindings.json; do
+  if [ ! -r "$GOLDEN_CONFIG/$name" ]; then
+    echo "exam-session: missing golden config $GOLDEN_CONFIG/$name" >&2
+    exit 1
+  fi
+done
+rm -rf "$VSCODE_USER_DATA"
+mkdir -p "$VSCODE_USER_DATA/User"
+cp "$GOLDEN_CONFIG/settings.json" "$VSCODE_USER_DATA/User/settings.json"
+cp "$GOLDEN_CONFIG/keybindings.json" "$VSCODE_USER_DATA/User/keybindings.json"
+if [ -d "$KIOSK_HOME/.config/Code/User/snippets" ]; then
+  cp -a "$KIOSK_HOME/.config/Code/User/snippets" "$VSCODE_USER_DATA/User/" 2>/dev/null || true
+fi
+chown -R examkiosk:examkiosk "$VSCODE_USER_DATA" 2>/dev/null || true
+chmod -R u+rwX "$VSCODE_USER_DATA" 2>/dev/null || true
+
+# Guard against in-session tampering. VS Code's own writes still succeed; they
+# are simply reverted, so no error notifications are produced.
+restore_golden_config() {
+  while true; do
+    for name in settings.json keybindings.json; do
+      if ! cmp -s "$GOLDEN_CONFIG/$name" "$VSCODE_USER_DATA/User/$name"; then
+        # Restore atomically so VS Code never observes a partially written file.
+        cp "$GOLDEN_CONFIG/$name" "$VSCODE_USER_DATA/User/$name.jmx-restore" 2>/dev/null || continue
+        mv -f "$VSCODE_USER_DATA/User/$name.jmx-restore" "$VSCODE_USER_DATA/User/$name" 2>/dev/null || true
+      fi
+    done
+    sleep 1
+  done
+}
+restore_golden_config &
+GUARD_PID=$!
 
 # Start Openbox window manager and wait for it to be ready
 openbox-session &
@@ -264,14 +308,19 @@ firejail --net=none \
   --whitelist=/home/examkiosk/exam_workspace \
   --whitelist=/home/examkiosk/.vscode/extensions \
   --whitelist=/home/examkiosk/.config/Code \
+  --whitelist="$VSCODE_USER_DATA" \
   --whitelist=/home/examkiosk/.bashrc \
   --whitelist=/home/examkiosk/.restricted_bashrc \
   --whitelist=/home/examkiosk/restricted_bin \
   --whitelist=/run/jmx \
   --ignore=nogroups \
-  code --disable-gpu --wait /home/examkiosk/exam_workspace
+  code --disable-gpu \
+    --user-data-dir="$VSCODE_USER_DATA" \
+    --extensions-dir=/home/examkiosk/.vscode/extensions \
+    --wait /home/examkiosk/exam_workspace
 
-# When VS Code is closed, kill the compositor and Openbox, then log out
+# When VS Code is closed, stop the guard, compositor and Openbox, then log out
+kill $GUARD_PID 2>/dev/null || true
 pkill -u examkiosk -x picom 2>/dev/null || true
 kill $OPENBOX_PID
 killall openbox 2>/dev/null || true
@@ -341,22 +390,26 @@ sudo chown -R root:root /home/examkiosk/restricted_bin
 sudo usermod -s /bin/rbash examkiosk
 
 echo ">>> [11] Locking down permissions..."
-# 1. Clear stuck session backups causing the unsaved changes prompt
-sudo rm -rf /home/examkiosk/.config/Code/User/Backups/*
+# The settings files are no longer made immutable in place. Immutable files
+# caused VS Code's atomic writes to fail, which surfaced as error popups. The
+# golden copies in /etc/jmx/vscode are root-owned and read-only to examkiosk;
+# exam-session.sh copies them into a per-session user-data dir that is always
+# writable and always discarded.
+sudo chmod 0755 /etc/jmx/vscode
+sudo chmod 0644 /etc/jmx/vscode/settings.json /etc/jmx/vscode/keybindings.json
 
-# 2. Grant examkiosk ownership of the User directory so code Auto-Save functions
-sudo chown -R examkiosk:examkiosk /home/examkiosk/.config/Code/User
-sudo chmod 755 /home/examkiosk/.config/Code/User
+# Remove any legacy in-place settings files left by an older provisioning.
+# Clear the immutable flag first so re-provisioning stays idempotent.
+for legacy in /home/examkiosk/.config/Code/User/settings.json \
+              /home/examkiosk/.config/Code/User/keybindings.json; do
+  if [ -f "$legacy" ]; then
+    sudo chattr -i "$legacy" 2>/dev/null || true
+    sudo rm -f "$legacy"
+  fi
+done
 
-# 3. Assign root ownership to the settings files
-sudo chown root:root /home/examkiosk/.config/Code/User/settings.json
-sudo chown root:root /home/examkiosk/.config/Code/User/keybindings.json
-sudo chmod 644 /home/examkiosk/.config/Code/User/settings.json
-sudo chmod 644 /home/examkiosk/.config/Code/User/keybindings.json
- 
-# 4. Lock settings files with the immutable attribute (prevents atomic save file replacement)
-sudo chattr +i /home/examkiosk/.config/Code/User/settings.json
-sudo chattr +i /home/examkiosk/.config/Code/User/keybindings.json
+# Clear stuck session backups causing the unsaved changes prompt (legacy dir)
+sudo rm -rf /home/examkiosk/.config/Code/User/Backups/* 2>/dev/null || true
 
 echo ">>> [11.1] Restricting console login to sudo and labadmin groups..."
 # Add lab administrators with: usermod -aG labadmin <user>
