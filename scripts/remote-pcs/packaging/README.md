@@ -20,9 +20,14 @@ administration CLI. It is published from the same release tag as `jmxremote`.
 
 There is no periodic provisioning retry timer. Provisioning is triggered by:
 
-- the package `postinst` after an install/upgrade;
+- `jmx-provision.service` on the first boot after installation when
+  `/var/lib/jmx-setup/pending` exists (used by package-driven Cubic ISOs);
+- the package `postinst` after an install/upgrade on a running system;
 - `jmx-update.service` after the daily apt run;
 - `sudo jmx-setup run`.
+
+The unit is enabled by the package on first install and is condition-gated, so
+it is a no-op after provisioning succeeds and on live ISO boots.
 
 ## Guards
 

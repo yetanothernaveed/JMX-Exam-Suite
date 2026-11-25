@@ -37,7 +37,8 @@ sudo jmx-setup config show
 the `jmx-setup` CLI for validated, backed-up edits to
 `/etc/jmxd/jmxd.conf`. Update with `sudo apt update && sudo apt upgrade`.
 Release and repository maintenance details are in
-[`docs/RELEASING.md`](docs/RELEASING.md).
+[`docs/RELEASING.md`](docs/RELEASING.md). The complete Cubic ISO build procedure
+is in [`docs/cubic_iso_generation.md`](docs/cubic_iso_generation.md).
 
 Each directory contains a separate README.md file that provides detailed instructions on how to set up and use the respective components. Please refer to those files for more information on each component.
 

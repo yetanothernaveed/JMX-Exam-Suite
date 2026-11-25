@@ -17,3 +17,10 @@ ExecStart=/usr/lib/jmx-setup/run-provision.sh
 TimeoutStartSec=3600
 Nice=10
 IOSchedulingClass=idle
+
+# Enabled by the package on first install. This gives a Cubic-built installed
+# system a one-time first-boot trigger while the pending marker exists. The
+# conditions above make it a no-op on live ISOs, during exams, while held, and
+# after provisioning has already succeeded.
+[Install]
+WantedBy=graphical.target

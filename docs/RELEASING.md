@@ -213,14 +213,19 @@ sudo jmx-setup unhold
 
 The first `jmxsetup` install also disables and archives the legacy
 `jmx-setup.service` and `jmxremote-update.*` units so only one update path
-remains active.
+remains active. It enables `jmx-provision.service` as a condition-gated
+first-boot trigger; this is how package-driven Cubic ISOs provision on the
+first boot of an installed machine without a separate `/opt/jmx-setup` tree.
+See [`cubic_iso_generation.md`](cubic_iso_generation.md) for the full ISO
+build procedure.
 
 ### Provisioning on an existing machine
 
-Package installation marks the packaged assets as pending and starts
-`jmx-provision.service`. The wrapper compares a checksum of
-`setup_script.sh`, `branding/**`, and `rc.xml`; an upgrade that does not
-change those assets is a no-op.
+Package installation marks the packaged assets as pending. On a running system
+it starts `jmx-provision.service`; inside a Cubic chroot it leaves the pending
+marker for the first boot of the installed machine. The wrapper compares a
+checksum of `setup_script.sh`, `branding/**`, and `rc.xml`; an upgrade that does
+not change those assets is a no-op.
 
 ```bash
 sudo jmx-setup status

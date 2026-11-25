@@ -1,144 +1,77 @@
 # Building the JMX live ISO with Cubic
 
-The live ISO is built from the stock Lubuntu ISO with Cubic. The only files the
-ISO adds to the live system are:
+The current ISO is **package-driven**. The complete, minute-by-minute procedure
+is in [`cubic_iso_generation.md`](cubic_iso_generation.md). Start there; this
+page is only an overview.
 
-- `/opt/jmx-setup/**` — setup script, branding, and Openbox config
-- `/etc/systemd/system/jmx-setup.service` — first-boot provisioning unit, and
-  its enablement symlink
+## What the ISO contains
 
-The first-boot unit installs and configures the kiosk. The `jmxsetup` APT
-package then takes over future provisioning and updates. On an installed
-machine, migrate once:
+The ISO adds the following to the stock Lubuntu live system:
 
-```bash
-sudo apt update
-sudo apt install jmxsetup
-```
+- `/etc/apt/keyrings/jmx.gpg` — the JMX APT repository signing key;
+- `/etc/apt/sources.list.d/jmx.list` — the JMX APT source;
+- the `jmxsetup` package, installed inside the Cubic chroot.
 
-The package archives the legacy `/etc/systemd/system/jmx-setup.service` and
-`jmxremote-update.*` units, enables the daily 17:05 update timer, and applies
-the packaged provisioning assets when they differ from what is already
-installed. `/opt/jmx-setup` is left untouched for reference and recovery.
+The package supplies the provisioning script, branding assets, `rc.xml`, the
+`jmx-setup` CLI, the first-boot trigger, and the daily update timer. The old
+`/opt/jmx-setup/**` tree and `/etc/systemd/system/jmx-setup.service` are **not**
+part of the ISO anymore.
 
-## Why the live session must not run the setup unit
+## Why the live session must not run provisioning
 
-The live image boots with `boot=casper`. `jmx-setup.service` installs packages,
+The live image boots with `boot=casper`. Provisioning installs packages,
 rewrites the desktop session list, and rebuilds branding for an *installed*
-system. In the live session those changes are discarded, and because the unit
-is pulled into the boot transaction, it holds back `graphical.target` while
-`network-online.target` and `apt` run. SDDM never starts, so the screen goes
-black with only a cursor after the splasher exits.
+system. In the live session those changes are discarded, and if provisioning
+is pulled into the boot transaction it can hold back `graphical.target` while
+`network-online.target` and `apt` run. The result is a black screen with only a
+cursor after the splasher exits.
 
-The unit therefore has:
-
-```ini
-ConditionKernelCommandLine=!boot=casper
-```
-
-Installed systems do not have `boot=casper` on the kernel command line, so the
-unit still runs on the first boot after installation. `setup_script.sh` has the
-same guard as a second line of defence.
-
-## One-time fix in the Cubic project (chroot terminal)
-
-Run inside the Cubic chroot. Replace the unit with the version from
-`scripts/remote-pcs/jmx-setup.service`:
+Both `jmx-provision.service` and `setup_script.sh` check:
 
 ```bash
-cat >/etc/systemd/system/jmx-setup.service <<'EOF'
-[Unit]
-Description=Provision JMX exam kiosk on first boot
-Documentation=https://github.com/yetanothernaveed/JMX-Exam-Suite
-ConditionKernelCommandLine=!boot=casper
-ConditionPathExists=!/var/lib/jmx-setup/completed
-Wants=network-online.target
-After=network-online.target display-manager.service
-
-[Service]
-Type=oneshot
-StateDirectory=jmx-setup
-WorkingDirectory=/opt/jmx-setup
-ExecStart=/bin/bash /opt/jmx-setup/setup_script.sh
-ExecStartPost=/usr/bin/touch /var/lib/jmx-setup/completed
-ExecStartPost=-/usr/bin/systemctl try-restart sddm.service
-RemainAfterExit=yes
-
-[Install]
-WantedBy=graphical.target
-EOF
+grep -qw 'boot=casper' /proc/cmdline
 ```
 
-Keep the copy under `/opt` in sync (some build notes copy it from there):
+and exit before doing any work. Installed systems do not have `boot=casper`, so
+provisioning runs there.
+
+## What happens on first boot after installation
+
+The `jmxsetup` post-install script runs inside the Cubic chroot where systemd
+is not running. It therefore creates the pending marker and enables the units,
+but does not provision the chroot.
+
+On the first boot of the installed system:
+
+1. `graphical.target` pulls in `jmx-provision.service`.
+2. The unit waits for `network-online.target` and `display-manager.service`.
+3. `run-provision.sh` checks the hold file, active exam session, live-ISO
+   condition, and apt locks.
+4. The packaged `setup_script.sh` installs `jmxremote` and applies the kiosk
+   configuration.
+5. The applied asset hash is written and the pending marker is removed.
+
+Later boots skip the service because the pending marker is gone. Daily updates
+are handled by `jmx-update.timer` at 17:05.
+
+## Quick checks
+
+Live ISO:
 
 ```bash
-install -m 0644 /etc/systemd/system/jmx-setup.service \
-  /opt/jmx-setup/jmx-setup.service
+grep -qw 'boot=casper' /proc/cmdline && echo live-iso-confirmed
+systemctl status jmx-provision.service --no-pager
+systemctl is-active sddm
 ```
 
-Move the enablement from `multi-user.target` (which blocks the display manager)
-to `graphical.target` (starts alongside SDDM):
+Installed system after first boot:
 
 ```bash
-systemctl disable jmx-setup.service 2>/dev/null || true
-rm -f /etc/systemd/system/multi-user.target.wants/jmx-setup.service
-mkdir -p /etc/systemd/system/graphical.target.wants
-ln -sfn /etc/systemd/system/jmx-setup.service \
-  /etc/systemd/system/graphical.target.wants/jmx-setup.service
+jmx-setup status
+systemctl status jmx-provision.service --no-pager
+systemctl is-enabled jmx-update.timer
+dpkg-query -W -f='${Package} ${Version} ${Status}\n' jmxsetup jmxremote
 ```
 
-Update the script copy in the ISO as well. The only change is the guard at the
-top of `scripts/remote-pcs/setup_script.sh`:
-
-```bash
-sed -i '/^SCRIPT_DIR=/a\
-\
-if grep -qw "boot=casper" /proc/cmdline 2>/dev/null; then\
-    echo "Live ISO environment detected (boot=casper); skipping JMX setup."\
-    exit 0\
-fi' /opt/jmx-setup/setup_script.sh
-```
-
-Verify the result in the chroot:
-
-```bash
-grep -n 'ConditionKernelCommandLine' /etc/systemd/system/jmx-setup.service
-ls -l /etc/systemd/system/graphical.target.wants/jmx-setup.service
-test ! -e /etc/systemd/system/multi-user.target.wants/jmx-setup.service && echo "not blocking multi-user"
-```
-
-Then finish the Cubic wizard and rebuild the ISO.
-
-## Quick check on an already-built ISO
-
-Boot the existing ISO, and at the GRUB menu press `e` on "Try or Install
-Lubuntu". Append this to the `linux` line and press `Ctrl+X`:
-
-```
-systemd.mask=jmx-setup.service
-```
-
-If the Lubuntu live desktop now appears, the diagnosis is confirmed. This
-kernel argument is a one-off test only; the rebuilt ISO does not need it.
-
-## Verifying the rebuilt ISO
-
-1. Boot the ISO and choose "Try or Install Lubuntu". The normal Lubuntu live
-   desktop must appear.
-2. Confirm the live session skipped provisioning:
-
-   ```bash
-   systemctl status jmx-setup.service      # inactive (condition skipped)
-   systemctl is-active sddm                # active
-   ```
-
-3. Install to a VM, boot the installed system, and confirm that provisioning
-   runs there:
-
-   ```bash
-   systemctl status jmx-setup.service      # active (exited)
-   grep boot /proc/cmdline                 # must NOT contain boot=casper
-   ```
-
-   If the boot appears to hang, switch to a TTY with `Ctrl+Alt+F3` and inspect
-   `journalctl -b -u jmx-setup.service`.
+See [`cubic_iso_generation.md`](cubic_iso_generation.md) for the full chroot
+commands, verification steps, troubleshooting, and release-rebuild procedure.
