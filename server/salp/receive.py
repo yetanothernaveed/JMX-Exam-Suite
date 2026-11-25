@@ -1,6 +1,9 @@
 import struct
 import json
 
+# Keep in sync with remote/src/salp/common.hpp (kMaxMessageSize).
+MAX_MESSAGE_SIZE = 128 * 1024 * 1024
+
 def receive_exact(conn, length):
     """
     Helper function to ensure we read exactly 'length' bytes.
@@ -28,7 +31,10 @@ def receive_json(conn):
     
     # Unpack the length (network byte order)
     message_length = struct.unpack('!I', header)[0]
-    
+    if message_length > MAX_MESSAGE_SIZE:
+        print(f"Rejected oversized message: {message_length} bytes")
+        return None
+
     # Read the actual message
     message_bytes = receive_exact(conn, message_length)
     if not message_bytes:

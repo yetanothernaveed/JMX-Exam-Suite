@@ -120,6 +120,8 @@ sudo chmod -R 755 /home/examkiosk/.config/Code
 sudo -u examkiosk code --install-extension vscjava.vscode-java-pack
 sudo -u examkiosk code --install-extension ms-python.python
 sudo -u examkiosk code --install-extension ms-vscode.cpptools
+# Question assets can be PDFs; render them in a VS Code tab like any other file.
+sudo -u examkiosk code --install-extension tomoki1207.pdf
 
 echo ">>> [7] Writing golden VS Code settings and keybindings..."
 

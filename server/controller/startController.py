@@ -172,20 +172,3 @@ def start_controller(payload, user_args=None):
     else:
         raise DatabaseError("Database connection is not established. Please connect to the database first.")
 
-
-def get_questions(questions_folder):
-    # For each folder in questions folder, look for files with extensions .md, .java and .py
-    # Don't look at the questions folder itself, only look at the subfolders
-    questions = []
-    for root, dirs, _ in os.walk(questions_folder):
-        for dir in dirs:
-            dir_path = os.path.join(root, dir)
-            for file in os.listdir(dir_path):
-                if file.endswith(".md") or file.endswith(".java") or file.endswith(".py") or file.endswith(".cpp"):
-                    questions.append({
-                        "qid": dir,
-                        "path": os.path.join(dir_path, file),
-                        "extension": os.path.splitext(file)[1]
-                    })
-           
-    return questions

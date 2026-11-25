@@ -1,14 +1,96 @@
 #pragma once
 
+#include "../utils/base64.hpp"
 #include "../utils/connectToServer.hpp"
 #include "../lib/json.hpp"
 #include "../session/sessionManager.hpp"
 
+#include <array>
+#include <cstdint>
 #include <string>
+#include <string_view>
 #include <unistd.h>
 #include <climits>
+#include <vector>
 
 namespace command_handler {
+    // File types that may be placed in the exam workspace as question assets.
+    inline bool is_supported_question_extension(const std::string& extension) {
+        static constexpr std::array<std::string_view, 14> supported = {
+            ".md", ".txt", ".java", ".py", ".cpp", ".c", ".h",
+            ".pdf", ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"
+        };
+        for (std::string_view candidate : supported) {
+            if (extension == candidate) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Writes every question returned by the server into <workspace>/<qid>/.
+    // Text questions keep their previous behaviour; assets marked with
+    // "encoding": "base64" are decoded and written as binary files.
+    inline bool writeQuestionFiles(const nlohmann::json& questions, std::string& error) {
+        const std::filesystem::path workspace(DaemonSettings().workspace_directory);
+
+        for (const auto& question : questions) {
+            const std::string qid = question.value("qid", std::string{});
+            if (!exam_workspace_handler::is_safe_path_component(qid)) {
+                error = "Server returned an invalid question ID";
+                return false;
+            }
+
+            std::string extension = question.value("extension", std::string{});
+            if (!extension.empty() && extension.front() != '.') {
+                extension.insert(extension.begin(), '.');
+            }
+            if (!is_supported_question_extension(extension)) {
+                error = "Server returned an unsupported file extension for question '" + qid + "'";
+                return false;
+            }
+
+            std::string filename = question.value("filename", std::string{});
+            if (filename.empty()) {
+                filename = qid + extension;
+            }
+            if (!exam_workspace_handler::is_safe_path_component(filename) ||
+                std::filesystem::path(filename).filename() != filename) {
+                error = "Server returned an invalid filename for question '" + qid + "'";
+                return false;
+            }
+
+            const std::string encoding = question.value("encoding", std::string{"text"});
+            // get_ref avoids a second copy of a potentially large base64 string.
+            const std::string& content = question.at("content").get_ref<const std::string&>();
+            const std::filesystem::path directory = workspace / qid;
+
+            if (encoding == "base64") {
+                std::vector<std::uint8_t> bytes;
+                std::string decode_error;
+                if (!jmx::base64::decode(content, bytes, decode_error, jmx::kMaxMessageSize)) {
+                    error = "Failed to decode question asset '" + filename + "': " + decode_error;
+                    return false;
+                }
+                if (!exam_workspace_handler::write_binary_file_to_directory(directory, filename, bytes)) {
+                    error = "Failed to write question asset '" + filename + "' to exam workspace";
+                    return false;
+                }
+            } else if (encoding == "text" || encoding == "utf-8") {
+                if (!exam_workspace_handler::write_file_to_directory(directory, filename, content)) {
+                    error = "Failed to write question '" + filename + "' to exam workspace";
+                    return false;
+                }
+            } else {
+                error = "Unsupported encoding '" + encoding + "' for question '" + qid + "'";
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+
     inline std::string handleHello(const nlohmann::json& request) {
         const nlohmann::json& payload = request.value("payload", nlohmann::json::object());
 
@@ -102,15 +184,9 @@ namespace command_handler {
         }
         
         try {
-            // For each question in responseJson["payload"]["questions"], write to a file in the exam_workspace directory
-            for (const auto& question : responseJson["payload"]["questions"]) {
-                std::string question_filename = question["qid"].get<std::string>() + question["extension"].get<std::string>();
-    
-                exam_workspace_handler::write_file_to_directory(
-                    std::filesystem::path(DaemonSettings().workspace_directory + "/" + question["qid"].get<std::string>()),
-                    question_filename,
-                    question["content"].get<std::string>()
-                );
+            std::string write_error;
+            if (!writeQuestionFiles(responseJson["payload"].value("questions", nlohmann::json::array()), write_error)) {
+                return "ERROR: " + write_error;
             }
         } catch (const std::exception& e) {
             return std::string("ERROR: Exception occurred while writing questions to exam workspace: ") + e.what();
@@ -227,15 +303,9 @@ namespace command_handler {
         }
 
         try {
-            // Write questions to exam_workspace
-            for (const auto& question : responseJson["payload"]["questions"]) {
-                std::string question_filename = question["qid"].get<std::string>() + question["extension"].get<std::string>();
-    
-                exam_workspace_handler::write_file_to_directory(
-                    std::filesystem::path(DaemonSettings().workspace_directory + "/" + question["qid"].get<std::string>()),
-                    question_filename,
-                    question["content"].get<std::string>()
-                );
+            std::string write_error;
+            if (!writeQuestionFiles(responseJson["payload"].value("questions", nlohmann::json::array()), write_error)) {
+                return "ERROR: " + write_error;
             }
         } catch (const std::exception& e) {
             return std::string("ERROR: Exception occurred while writing questions to exam workspace: ") + e.what();

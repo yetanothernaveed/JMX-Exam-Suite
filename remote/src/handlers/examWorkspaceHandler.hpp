@@ -2,15 +2,46 @@
 
 #include "../config/daemonSettings.hpp"
 
+#include <cstdint>
 #include <iostream>
 #include <filesystem>
 #include <fstream>
 #include <string>
 #include <system_error>
+#include <vector>
 
 namespace fs = std::filesystem;
 
 namespace exam_workspace_handler {
+    // Server-supplied names are used to build paths inside the exam workspace.
+    // Reject separators, parent references and embedded NULs so a malformed
+    // response cannot write outside the workspace.
+    inline bool is_safe_path_component(const std::string& name) {
+        return !name.empty() && name != "." && name != ".." &&
+               name.find('/') == std::string::npos &&
+               name.find('\\') == std::string::npos &&
+               name.find('\0') == std::string::npos;
+    }
+
+    inline bool ensure_directory(const fs::path& dir_path) {
+        std::error_code ec;
+        if (!fs::exists(dir_path, ec)) {
+            if (ec) {
+                std::cerr << "Failed to inspect directory: " << dir_path
+                          << " | Reason: " << ec.message() << std::endl;
+                return false;
+            }
+
+            fs::create_directories(dir_path, ec);
+            if (ec) {
+                std::cerr << "Failed to create directory: " << dir_path
+                          << " | Reason: " << ec.message() << std::endl;
+                return false;
+            }
+        }
+        return true;
+    }
+
     inline bool clear_directory() {
         DaemonSettings settings;
         fs::path dir_path = fs::path(settings.workspace_directory);
@@ -108,24 +139,11 @@ namespace exam_workspace_handler {
     }
 
     inline bool write_file_to_directory(const fs::path& dir_path, const std::string& filename, const std::string& content) {
-        std::error_code ec;
-
-        if (!fs::exists(dir_path, ec)) {
-            if (ec) {
-                std::cerr << "Failed to inspect directory: " << dir_path
-                          << " | Reason: " << ec.message() << std::endl;
-                return false;
-            }
-
-            fs::create_directories(dir_path, ec);
-            if (ec) {
-                std::cerr << "Failed to create directory: " << dir_path
-                          << " | Reason: " << ec.message() << std::endl;
-                return false;
-            }
+        if (!is_safe_path_component(filename) || !ensure_directory(dir_path)) {
+            return false;
         }
 
-        fs::path file_path = dir_path / filename; 
+        const fs::path file_path = dir_path / filename;
 
         std::ofstream ofs(file_path, std::ios::out | std::ios::trunc);
         if (!ofs.is_open()) {
@@ -134,6 +152,37 @@ namespace exam_workspace_handler {
         }
 
         ofs << content;
+        ofs.close();
+
+        if (!ofs) {
+            std::cerr << "Failed to write file: " << file_path << std::endl;
+            return false;
+        }
+
+        return true;
+    }
+
+    // Binary-safe counterpart for PDFs and images. Text-mode ofstreams would
+    // corrupt these files (notably on Windows-style line endings and NULs).
+    inline bool write_binary_file_to_directory(const fs::path& dir_path,
+                                               const std::string& filename,
+                                               const std::vector<std::uint8_t>& content) {
+        if (!is_safe_path_component(filename) || !ensure_directory(dir_path)) {
+            return false;
+        }
+
+        const fs::path file_path = dir_path / filename;
+
+        std::ofstream ofs(file_path, std::ios::out | std::ios::binary | std::ios::trunc);
+        if (!ofs.is_open()) {
+            std::cerr << "Failed to create file: " << file_path << std::endl;
+            return false;
+        }
+
+        if (!content.empty()) {
+            ofs.write(reinterpret_cast<const char*>(content.data()),
+                      static_cast<std::streamsize>(content.size()));
+        }
         ofs.close();
 
         if (!ofs) {
