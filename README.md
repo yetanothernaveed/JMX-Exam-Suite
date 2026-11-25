@@ -25,8 +25,19 @@ sudo apt update
 sudo apt install jmxremote
 ```
 
-Update with `sudo apt update && sudo apt upgrade`. Release and repository
-maintenance details are in [`docs/RELEASING.md`](docs/RELEASING.md).
+Kiosk machines should also install the provisioning/update package:
+
+```bash
+sudo apt install jmxsetup
+sudo jmx-setup status
+sudo jmx-setup config show
+```
+
+`jmxsetup` installs the daily 17:05 update timer (skipped during an exam) and
+the `jmx-setup` CLI for validated, backed-up edits to
+`/etc/jmxd/jmxd.conf`. Update with `sudo apt update && sudo apt upgrade`.
+Release and repository maintenance details are in
+[`docs/RELEASING.md`](docs/RELEASING.md).
 
 Each directory contains a separate README.md file that provides detailed instructions on how to set up and use the respective components. Please refer to those files for more information on each component.
 

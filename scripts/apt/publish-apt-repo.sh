@@ -138,8 +138,10 @@ PUBLIC_DIR="$HOME/.aptly/public"
 [ -f "$PUBLIC_DIR/dists/stable/InRelease" ] || die "aptly did not create InRelease"
 gpg --verify "$PUBLIC_DIR/dists/stable/InRelease" >/dev/null 2>&1 ||
   die "generated InRelease signature could not be verified"
-grep -q '^Package: jmxremote$' "$PUBLIC_DIR/dists/stable/main/binary-amd64/Packages" ||
-  die "jmxremote is missing from Packages"
+for package in jmxremote jmxsetup; do
+  grep -q "^Package: ${package}$" "$PUBLIC_DIR/dists/stable/main/binary-amd64/Packages" ||
+    die "${package} is missing from Packages"
+done
 
 log "assembling gh-pages tree"
 rm -rf "$REPO_CLONE/dists" "$REPO_CLONE/pool"
@@ -165,7 +167,7 @@ fi
 
 git -c user.name="github-actions[bot]" \
     -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-    commit -m "apt: jmxremote ${VERSION}"
+    commit -m "apt: jmxremote and jmxsetup ${VERSION}"
 
 if [ "$DRY_RUN" = "1" ]; then
   log "dry run: not pushing"

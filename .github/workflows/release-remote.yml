@@ -110,11 +110,26 @@ jobs:
           VERSION=${VERSION} nfpm package --config nfpm.yaml --target dist/jmxremote_${VERSION}_amd64.deb
           VERSION=${VERSION} nfpm package --config nfpm.yaml --target dist/jmxremote-${VERSION}-1.x86_64.rpm
 
+      # 3.1 Regression tests for the jmx-setup CLI.
+      - name: Test jmx-setup CLI
+        working-directory: .
+        run: bash scripts/remote-pcs/packaging/tests/test-jmx-setup.sh
+
+      # 3.2 Package the kiosk provisioning assets and jmx-setup CLI.
+      # Run from the repository root: nfpm resolves `src` paths relative to
+      # the current working directory.
+      - name: Build jmxsetup .deb Package
+        working-directory: .
+        run: |
+          VERSION=${VERSION} nfpm package \
+            --config scripts/remote-pcs/packaging/nfpm.yaml \
+            --target remote/dist/jmxsetup_${VERSION}_amd64.deb
+
       # 4. Generate Checksums
       - name: Generate Checksums
         run: |
           cd dist
-          sha256sum jmxremote_*.deb jmxremote-*.rpm jmxremote-*.tar.gz > SHA256SUMS
+          sha256sum jmxremote_*.deb jmxsetup_*.deb jmxremote-*.rpm jmxremote-*.tar.gz > SHA256SUMS
 
       # 5. Create the private GitHub Release (unchanged behaviour)
       - name: Publish Private GitHub Release
@@ -155,22 +170,23 @@ jobs:
           token: ${{ secrets.APT_REPO_TOKEN }}
           target_commitish: main
           tag_name: v${{ env.VERSION }}
-          name: JMX Remote ${{ env.VERSION }}
+          name: JMX Remote and Setup ${{ env.VERSION }}
           generate_release_notes: false
           body: |
-            JMX remote CLI and daemon version ${{ env.VERSION }}.
+            JMX remote CLI, daemon, and kiosk setup packages version ${{ env.VERSION }}.
 
             Install/update via APT:
 
             ```bash
             sudo apt update
-            sudo apt install jmxremote
+            sudo apt install jmxremote jmxsetup
             ```
 
             Repository: ${{ vars.APT_PAGES_URL }}
             Source commit: ${{ github.sha }}
           files: |
             remote/dist/jmxremote_*.deb
+            remote/dist/jmxsetup_*.deb
             remote/dist/jmxremote-*.rpm
             remote/dist/jmxremote-*.tar.gz
             remote/dist/SHA256SUMS

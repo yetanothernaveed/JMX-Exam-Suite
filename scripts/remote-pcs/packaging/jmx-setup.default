@@ -1,0 +1,21 @@
+# JMX kiosk provisioning defaults.
+#
+# These values are used when /etc/jmxd/jmxd.conf is first created, or when a
+# provisioning run is forced with JMX_FORCE_CONFIG=1. `jmx-setup config set`
+# keeps them in sync with the live daemon configuration.
+#
+# Prefer the CLI for day-to-day changes:
+#   sudo jmx-setup config set server_address 10.0.0.10
+#   sudo jmx-setup config set server_port 8080
+#   sudo jmx-setup config set session_duration_in_hours 2
+
+JMX_SERVER_ADDRESS=127.0.0.1
+JMX_SERVER_PORT=8080
+JMX_SESSION_DURATION_HOURS=2
+
+# Rewrite an existing /etc/jmxd/jmxd.conf from the values above.
+JMX_FORCE_CONFIG=0
+
+# Remove non-exam desktop sessions from /usr/share/xsessions during
+# provisioning. Set to 0 only on machines that are not dedicated kiosks.
+JMX_PRUNE_SESSIONS=1

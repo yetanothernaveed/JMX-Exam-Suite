@@ -1,0 +1,777 @@
+#!/bin/bash
+#
+# jmx-setup - administer the JMX kiosk provisioning package and jmxd config.
+#
+# Writable daemon keys (phase 1):
+#   server_address, server_port, session_duration_in_hours
+#
+# socket_directory and workspace_directory are intentionally managed by the
+# provisioning package: the socket path is compiled into jmx/jmxd, and
+# workspace paths are shared with jmxcleanerd and the firejail launcher.
+
+set -euo pipefail
+
+CONFIG_FILE="${JMX_CONFIG_FILE:-/etc/jmxd/jmxd.conf}"
+DEFAULTS_FILE="${JMX_SETUP_DEFAULTS_FILE:-/etc/default/jmx-setup}"
+BACKUP_DIR="$(dirname "$CONFIG_FILE")/backups"
+STATE_DIR="/var/lib/jmx-setup"
+LIB_DIR="/usr/lib/jmx-setup"
+PENDING_FILE="$STATE_DIR/pending"
+APPLIED_VERSION_FILE="$STATE_DIR/applied-version"
+APPLIED_HASH_FILE="$STATE_DIR/applied-assets.sha256"
+LAST_RESULT_FILE="$STATE_DIR/last-result"
+REBOOT_MARKER="$STATE_DIR/reboot-recommended"
+HOLD_FILE="/etc/jmx/jmx-setup-hold"
+SESSION_FILE="/run/jmx/sessions/current_session.txt"
+
+KNOWN_KEYS="socket_directory workspace_directory server_address server_port session_duration_in_hours"
+WRITABLE_KEYS="server_address server_port session_duration_in_hours"
+
+die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+log() { printf '%s\n' "$*"; }
+
+usage() {
+    cat <<'EOF'
+Usage: sudo jmx-setup <command> [options]
+
+Provisioning and updates:
+  status                         Show package, provisioning, session, timer state
+  run [--force]                  Apply pending provisioning now
+  update [--force]               Update jmxremote and jmxsetup now
+  hold                           Block automatic updates/provisioning
+  unhold                         Remove the hold
+  auto-update status             Show the daily update timer
+  auto-update enable             Enable the daily update timer
+  auto-update disable            Disable the daily update timer
+
+Daemon configuration (/etc/jmxd/jmxd.conf):
+  config show                    Show effective values and which are writable
+  config get <key>               Print one effective value
+  config set <key> <value>       Validate, back up, and update a value
+  config unset <key>             Remove an explicit value (use the default)
+  config validate                Validate the whole configuration file
+  config test                    Test jmxd and exam-server connectivity
+  config reset --yes             Restore default values (backup kept)
+  config sync-defaults           Copy current values into /etc/default/jmx-setup
+  config backups                 List configuration backups
+  config restore [name|latest]   Restore a configuration backup
+  config path                    Print the configuration file path
+
+Writable keys:
+  server_address                 IPv4 literal used by jmxd to reach the server
+  server_port                    TCP port, 1-65535
+  session_duration_in_hours      Positive integer
+
+The following are managed by provisioning and are not writable in phase 1:
+  socket_directory, workspace_directory
+EOF
+}
+
+require_root() {
+    if [ "${EUID}" -ne 0 ]; then
+        die "this command needs root; run it with sudo"
+    fi
+}
+
+require_no_active_session() {
+    if [ -f "$SESSION_FILE" ] && [ "${FORCE:-0}" != "1" ]; then
+        die "an exam session is active ($SESSION_FILE); use --force only when safe"
+    fi
+}
+
+is_known_key() {
+    case " $KNOWN_KEYS " in
+        *" $1 "*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+is_writable_key() {
+    case " $WRITABLE_KEYS " in
+        *" $1 "*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+config_default() {
+    case "$1" in
+        socket_directory) printf '%s\n' "/run/jmx" ;;
+        workspace_directory) printf '%s\n' "/home/examkiosk/exam_workspace" ;;
+        server_address) printf '%s\n' "127.0.0.1" ;;
+        server_port) printf '%s\n' "8080" ;;
+        session_duration_in_hours) printf '%s\n' "2" ;;
+        *) return 1 ;;
+    esac
+}
+
+# Read the effective value, falling back to the compiled-in default.
+config_effective() {
+    local key="$1" value
+    if [ -r "$CONFIG_FILE" ]; then
+        if value="$(awk -v k="$key" '
+            {
+                line = $0
+                sub(/^[ \t]+/, "", line)
+                sub(/[ \t]+$/, "", line)
+                if (line == "" || substr(line, 1, 1) == "#") next
+                pos = index(line, "=")
+                if (pos == 0) next
+                key = substr(line, 1, pos - 1)
+                val = substr(line, pos + 1)
+                gsub(/^[ \t]+|[ \t]+$/, "", key)
+                gsub(/^[ \t]+|[ \t]+$/, "", val)
+                if (key == k) { print val; found = 1; exit }
+            }
+            END { if (!found) exit 1 }
+        ' "$CONFIG_FILE")"; then
+            printf '%s\n' "$value"
+            return 0
+        fi
+    fi
+    config_default "$key"
+}
+
+config_has_explicit() {
+    [ -r "$CONFIG_FILE" ] || return 1
+    awk -v k="$1" '
+        {
+            line = $0
+            sub(/^[ \t]+/, "", line)
+            sub(/[ \t]+$/, "", line)
+            if (line == "" || substr(line, 1, 1) == "#") next
+            pos = index(line, "=")
+            if (pos == 0) next
+            key = substr(line, 1, pos - 1)
+            gsub(/^[ \t]+|[ \t]+$/, "", key)
+            if (key == k) { found = 1; exit }
+        }
+        END { exit(found ? 0 : 1) }
+    ' "$CONFIG_FILE" >/dev/null 2>&1
+}
+
+is_ipv4() {
+    local ip="$1" a b c d octet
+    [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || return 1
+    IFS=. read -r a b c d <<< "$ip"
+    for octet in "$a" "$b" "$c" "$d"; do
+        [[ "$octet" =~ ^[0-9]+$ ]] || return 1
+        (( 10#$octet >= 0 && 10#$octet <= 255 )) || return 1
+    done
+}
+
+validate_value_for_key() {
+    local key="$1" value="$2"
+    case "$key" in
+        server_address)
+            is_ipv4 "$value" ||
+                { printf 'server_address must be an IPv4 literal (jmxd uses inet_pton(AF_INET))\n' >&2; return 1; }
+            ;;
+        server_port)
+            [[ "$value" =~ ^[0-9]+$ ]] && (( 10#$value >= 1 && 10#$value <= 65535 )) ||
+                { printf 'server_port must be an integer from 1 to 65535\n' >&2; return 1; }
+            ;;
+        session_duration_in_hours)
+            [[ "$value" =~ ^[0-9]+$ ]] && (( 10#$value >= 1 && 10#$value <= 168 )) ||
+                { printf 'session_duration_in_hours must be an integer from 1 to 168\n' >&2; return 1; }
+            ;;
+        socket_directory|workspace_directory)
+            printf '%s is managed by provisioning and is not writable in phase 1\n' "$key" >&2
+            return 1
+            ;;
+        *)
+            printf 'unknown key: %s\n' "$key" >&2
+            return 1
+            ;;
+    esac
+}
+
+backup_file() {
+    local file="$1" base stamp dest
+    [ -f "$file" ] || return 0
+    install -d -m 0755 "$BACKUP_DIR"
+    base="$(basename "$file")"
+    stamp="$(date +%Y%m%dT%H%M%S-%N)"
+    dest="$BACKUP_DIR/${base}.${stamp}"
+    cp -a "$file" "$dest"
+    chmod 0600 "$dest"
+
+    # Keep the ten most recent backups of this file.
+    find "$BACKUP_DIR" -maxdepth 1 -type f -name "${base}.*" -printf '%T@ %p\n' 2>/dev/null |
+        sort -rn |
+        tail -n +11 |
+        cut -d' ' -f2- |
+        xargs -r rm -f
+    printf 'Backed up %s -> %s\n' "$file" "$dest"
+}
+
+write_config_value() {
+    local key="$1" value="$2" dir tmp
+    dir="$(dirname "$CONFIG_FILE")"
+    install -d -m 0755 "$dir"
+
+    if [ -L "$CONFIG_FILE" ]; then
+        die "$CONFIG_FILE is a symlink; refusing to replace it"
+    fi
+
+    tmp="$(mktemp "$dir/.$(basename "$CONFIG_FILE").XXXXXX")"
+    if [ -f "$CONFIG_FILE" ]; then
+        awk -v k="$key" -v v="$value" '
+            {
+                line = $0
+                line_trimmed = line
+                sub(/^[ \t]+/, "", line_trimmed)
+                sub(/[ \t]+$/, "", line_trimmed)
+                if (line_trimmed != "" && substr(line_trimmed, 1, 1) != "#") {
+                    pos = index(line_trimmed, "=")
+                    if (pos > 0) {
+                        existing = substr(line_trimmed, 1, pos - 1)
+                        gsub(/^[ \t]+|[ \t]+$/, "", existing)
+                        if (existing == k) {
+                            if (!found) { print k " = " v; found = 1 }
+                            next
+                        }
+                    }
+                }
+                print line
+            }
+            END { if (!found) print k " = " v }
+        ' "$CONFIG_FILE" > "$tmp"
+    else
+        {
+            printf '%s\n' "# JMX daemon configuration"
+            printf '%s\n' "# Edit with: sudo jmx-setup config set <key> <value>"
+            printf '\n'
+            printf '%s = %s\n' "$key" "$value"
+        } > "$tmp"
+    fi
+
+    chmod 0644 "$tmp"
+    chown root:root "$tmp"
+    mv -f "$tmp" "$CONFIG_FILE"
+}
+
+remove_config_value() {
+    local key="$1" dir tmp before after
+    dir="$(dirname "$CONFIG_FILE")"
+    [ -f "$CONFIG_FILE" ] || return 0
+
+    if [ -L "$CONFIG_FILE" ]; then
+        die "$CONFIG_FILE is a symlink; refusing to replace it"
+    fi
+
+    before="$(sha256sum "$CONFIG_FILE" | awk '{print $1}')"
+    tmp="$(mktemp "$dir/.$(basename "$CONFIG_FILE").XXXXXX")"
+    awk -v k="$key" '
+        {
+            line = $0
+            line_trimmed = line
+            sub(/^[ \t]+/, "", line_trimmed)
+            sub(/[ \t]+$/, "", line_trimmed)
+            if (line_trimmed != "" && substr(line_trimmed, 1, 1) != "#") {
+                pos = index(line_trimmed, "=")
+                if (pos > 0) {
+                    existing = substr(line_trimmed, 1, pos - 1)
+                    gsub(/^[ \t]+|[ \t]+$/, "", existing)
+                    if (existing == k) next
+                }
+            }
+            print line
+        }
+    ' "$CONFIG_FILE" > "$tmp"
+    chmod 0644 "$tmp"
+    chown root:root "$tmp"
+    mv -f "$tmp" "$CONFIG_FILE"
+    after="$(sha256sum "$CONFIG_FILE" | awk '{print $1}')"
+    [ "$before" = "$after" ] && log "No explicit $key entry was present."
+    return 0
+}
+
+defaults_var_for_key() {
+    case "$1" in
+        server_address) printf '%s\n' "JMX_SERVER_ADDRESS" ;;
+        server_port) printf '%s\n' "JMX_SERVER_PORT" ;;
+        session_duration_in_hours) printf '%s\n' "JMX_SESSION_DURATION_HOURS" ;;
+        *) return 1 ;;
+    esac
+}
+
+write_defaults_value() {
+    local var="$1" value="$2" dir tmp
+    [ -n "$var" ] || return 0
+    dir="$(dirname "$DEFAULTS_FILE")"
+    install -d -m 0755 "$dir"
+
+    tmp="$(mktemp "$dir/.$(basename "$DEFAULTS_FILE").XXXXXX")"
+    if [ -f "$DEFAULTS_FILE" ]; then
+        awk -v k="$var" -v v="$value" '
+            {
+                line = $0
+                trimmed = line
+                sub(/^[ \t]+/, "", trimmed)
+                if (trimmed ~ ("^#?[ \t]*" k "=")) {
+                    if (!found) { print k "=" v; found = 1 }
+                    next
+                }
+                print line
+            }
+            END { if (!found) print k "=" v }
+        ' "$DEFAULTS_FILE" > "$tmp"
+    else
+        {
+            printf '%s\n' "# JMX provisioning defaults."
+            printf '%s=%s\n' "$var" "$value"
+        } > "$tmp"
+    fi
+    chmod 0644 "$tmp"
+    chown root:root "$tmp"
+    mv -f "$tmp" "$DEFAULTS_FILE"
+}
+
+remove_defaults_value() {
+    local var="$1" dir tmp
+    [ -n "$var" ] || return 0
+    [ -f "$DEFAULTS_FILE" ] || return 0
+    dir="$(dirname "$DEFAULTS_FILE")"
+    tmp="$(mktemp "$dir/.$(basename "$DEFAULTS_FILE").XXXXXX")"
+    awk -v k="$var" '
+        {
+            line = $0
+            trimmed = line
+            sub(/^[ \t]+/, "", trimmed)
+            if (trimmed ~ ("^#?[ \t]*" k "=")) next
+            print line
+        }
+    ' "$DEFAULTS_FILE" > "$tmp"
+    chmod 0644 "$tmp"
+    chown root:root "$tmp"
+    mv -f "$tmp" "$DEFAULTS_FILE"
+}
+
+cmd_status() {
+    local pkg_version applied_version applied_hash pending last_result failures reboot session hold
+    pkg_version="$(dpkg-query -W -f='${Version}' jmxsetup 2>/dev/null || echo "not installed")"
+    applied_version="$(cat "$APPLIED_VERSION_FILE" 2>/dev/null || echo "never")"
+    applied_hash="$(cat "$APPLIED_HASH_FILE" 2>/dev/null || echo "none")"
+    [ -f "$PENDING_FILE" ] && pending="yes" || pending="no"
+    [ -f "$REBOOT_MARKER" ] && reboot="yes" || reboot="no"
+    [ -f "$SESSION_FILE" ] && session="active" || session="none"
+    [ -f "$HOLD_FILE" ] && hold="yes" || hold="no"
+    last_result="$(cat "$LAST_RESULT_FILE" 2>/dev/null || echo "never")"
+    failures="$(cat "$STATE_DIR/fail-count" 2>/dev/null || echo 0)"
+
+    log "jmxsetup package : $pkg_version"
+    log "Applied version  : $applied_version"
+    log "Applied hash     : $applied_hash"
+    log "Pending          : $pending"
+    log "Last result      : $last_result"
+    log "Failure count    : $failures"
+    log "Reboot advised   : $reboot"
+    log "Exam session     : $session"
+    log "Update hold      : $hold"
+    log "Config file      : $CONFIG_FILE"
+    log "  server_address            = $(config_effective server_address)"
+    log "  server_port               = $(config_effective server_port)"
+    log "  session_duration_in_hours = $(config_effective session_duration_in_hours)"
+
+    if command -v systemctl >/dev/null 2>&1; then
+        log "Update timer     : $(systemctl is-enabled jmx-update.timer 2>/dev/null || echo unknown)/$(systemctl is-active jmx-update.timer 2>/dev/null || echo unknown)"
+        systemctl list-timers jmx-update.timer --no-pager 2>/dev/null | sed -n '1,2p' || true
+    fi
+}
+
+cmd_config_show() {
+    local key value source writable
+    [ -e "$CONFIG_FILE" ] || log "Note: $CONFIG_FILE does not exist; defaults are shown."
+    log "$CONFIG_FILE"
+    for key in $KNOWN_KEYS; do
+        value="$(config_effective "$key")"
+        config_has_explicit "$key" && source="explicit" || source="default"
+        is_writable_key "$key" && writable="writable" || writable="managed"
+        printf '  %-28s = %-42s (%s, %s)\n' "$key" "$value" "$source" "$writable"
+    done
+}
+
+cmd_config_get() {
+    local key="${1:-}"
+    [ -n "$key" ] || die "usage: jmx-setup config get <key>"
+    is_known_key "$key" || die "unknown key: $key"
+    config_effective "$key"
+}
+
+cmd_config_set() {
+    local key="" value="" old_var var
+    FORCE=0
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --force) FORCE=1; shift ;;
+            *)
+                if [ -z "$key" ]; then key="$1"; shift
+                elif [ -z "$value" ]; then value="$1"; shift
+                else die "usage: jmx-setup config set <key> <value> [--force]"
+                fi
+                ;;
+        esac
+    done
+    [ -n "$key" ] && [ -n "$value" ] || die "usage: jmx-setup config set <key> <value> [--force]"
+    require_root
+    is_known_key "$key" || die "unknown key: $key"
+    is_writable_key "$key" || die "$key is managed by provisioning and is not writable in phase 1"
+    case "$value" in
+        *' '*|*$'\t'*|*$'\n'*|*=*) die "value must not contain whitespace, newlines, or '='" ;;
+    esac
+    validate_value_for_key "$key" "$value" || die "invalid value for $key"
+
+    # Write 080 as 80 and 0080 as 80 so the file stays canonical.
+    case "$key" in
+        server_port|session_duration_in_hours) value="$((10#$value))" ;;
+    esac
+
+    require_no_active_session
+    old_var="$(config_effective "$key")"
+    backup_file "$CONFIG_FILE"
+    write_config_value "$key" "$value"
+    var="$(defaults_var_for_key "$key")"
+    write_defaults_value "$var" "$value"
+    log "Updated $CONFIG_FILE"
+    log "  $key: $old_var -> $value"
+    log "Updated $DEFAULTS_FILE: $var=$value"
+    log "No jmxd restart is required; the value is read on the next connection."
+}
+
+cmd_config_unset() {
+    local key="" old_var var arg
+    FORCE=0
+    for arg in "$@"; do
+        case "$arg" in
+            --force) FORCE=1 ;;
+            *)
+                if [ -z "$key" ]; then
+                    key="$arg"
+                else
+                    die "usage: jmx-setup config unset <key> [--force]"
+                fi
+                ;;
+        esac
+    done
+    [ -n "$key" ] || die "usage: jmx-setup config unset <key> [--force]"
+    require_root
+    is_known_key "$key" || die "unknown key: $key"
+    is_writable_key "$key" || die "$key is managed by provisioning and is not writable in phase 1"
+    require_no_active_session
+    old_var="$(config_effective "$key")"
+    backup_file "$CONFIG_FILE"
+    remove_config_value "$key"
+    var="$(defaults_var_for_key "$key")"
+    remove_defaults_value "$var"
+    log "Removed explicit $key from $CONFIG_FILE"
+    log "  effective value is now $(config_default "$key") (was $old_var)"
+}
+
+cmd_config_validate() {
+    local errors=0 key value tag lineno perms owner group mode duplicates tmp
+    if [ ! -f "$CONFIG_FILE" ]; then
+        log "WARN: $CONFIG_FILE does not exist; daemon defaults will be used."
+        return 0
+    fi
+    if [ -L "$CONFIG_FILE" ]; then
+        log "ERROR: $CONFIG_FILE is a symlink"
+        errors=$((errors + 1))
+    fi
+
+    perms="$(stat -c '%U %G %a' "$CONFIG_FILE" 2>/dev/null || true)"
+    owner="${perms%% *}"; rest="${perms#* }"; group="${rest%% *}"; mode="${rest##* }"
+    if [ "$owner" != "root" ] || [ "$group" != "root" ] || [ "$mode" != "644" ]; then
+        log "WARN: $CONFIG_FILE is $owner:$group mode $mode; expected root:root 644"
+    fi
+
+    tmp="$(mktemp)"
+    while IFS=$'\t' read -r tag key value; do
+        if [ "$tag" = "BADLINE" ]; then
+            log "ERROR: malformed line $key in $CONFIG_FILE"
+            errors=$((errors + 1))
+            continue
+        fi
+        [ -n "$key" ] || continue
+        printf '%s\n' "$key" >> "$tmp"
+        if ! is_known_key "$key"; then
+            log "WARN: unknown key '$key' (ignored by jmxd)"
+            continue
+        fi
+        if is_writable_key "$key"; then
+            if ! validate_value_for_key "$key" "$value"; then
+                log "ERROR: invalid value for $key"
+                errors=$((errors + 1))
+            fi
+        elif [ -z "$value" ]; then
+            log "ERROR: $key must not be empty"
+            errors=$((errors + 1))
+        fi
+    done < <(awk '
+        {
+            line = $0
+            sub(/^[ \t]+/, "", line)
+            sub(/[ \t]+$/, "", line)
+            if (line == "") next
+            if (substr(line, 1, 1) == "#") next
+            pos = index(line, "=")
+            if (pos == 0) { print "BADLINE\t" NR; next }
+            key = substr(line, 1, pos - 1)
+            val = substr(line, pos + 1)
+            gsub(/^[ \t]+|[ \t]+$/, "", key)
+            gsub(/^[ \t]+|[ \t]+$/, "", val)
+            print "KEY\t" key "\t" val
+        }
+    ' "$CONFIG_FILE")
+
+    duplicates="$(sort "$tmp" | uniq -d)"
+    rm -f "$tmp"
+    if [ -n "$duplicates" ]; then
+        log "ERROR: duplicate keys: $(printf '%s ' $duplicates)"
+        errors=$((errors + 1))
+    fi
+
+    if [ "$errors" -gt 0 ]; then
+        log "Validation failed with $errors error(s)."
+        return 1
+    fi
+    log "Configuration is valid."
+}
+
+cmd_config_test() {
+    local jmx_bin server_addr server_port
+    jmx_bin="$(command -v jmx || true)"
+    [ -n "$jmx_bin" ] || die "jmx binary not found; is jmxremote installed?"
+    server_addr="$(config_effective server_address)"
+    server_port="$(config_effective server_port)"
+
+    log "Testing jmxd socket..."
+    if ! "$jmx_bin" hello; then
+        die "could not reach jmxd; check: systemctl status jmxd"
+    fi
+
+    log "Testing exam server $server_addr:$server_port..."
+    if ! "$jmx_bin" hello --server; then
+        die "could not reach the configured exam server"
+    fi
+    log "OK: jmxd and exam server are reachable."
+}
+
+cmd_config_reset() {
+    local dir tmp key var arg confirm=0
+    FORCE=0
+    for arg in "$@"; do
+        case "$arg" in
+            --yes) confirm=1 ;;
+            --force) FORCE=1 ;;
+            *) die "usage: jmx-setup config reset --yes [--force]" ;;
+        esac
+    done
+    [ "$confirm" = "1" ] || die "usage: jmx-setup config reset --yes [--force]"
+    require_root
+    require_no_active_session
+    backup_file "$CONFIG_FILE"
+    dir="$(dirname "$CONFIG_FILE")"
+    install -d -m 0755 "$dir"
+    tmp="$(mktemp "$dir/.$(basename "$CONFIG_FILE").XXXXXX")"
+    cat > "$tmp" <<'EOF'
+# JMX daemon configuration
+# Edit with: sudo jmx-setup config set <key> <value>
+socket_directory = /run/jmx
+workspace_directory = /home/examkiosk/exam_workspace
+server_address = 127.0.0.1
+server_port = 8080
+session_duration_in_hours = 2
+EOF
+    chmod 0644 "$tmp"
+    chown root:root "$tmp"
+    mv -f "$tmp" "$CONFIG_FILE"
+
+    for key in $WRITABLE_KEYS; do
+        var="$(defaults_var_for_key "$key")"
+        write_defaults_value "$var" "$(config_default "$key")"
+    done
+    log "Restored default values in $CONFIG_FILE"
+}
+
+cmd_config_sync_defaults() {
+    local key var
+    require_root
+    for key in $WRITABLE_KEYS; do
+        var="$(defaults_var_for_key "$key")"
+        write_defaults_value "$var" "$(config_effective "$key")"
+    done
+    log "Synced $DEFAULTS_FILE with the effective values from $CONFIG_FILE"
+}
+
+cmd_config_backups() {
+    if [ ! -d "$BACKUP_DIR" ]; then
+        log "No backups in $BACKUP_DIR"
+        return 0
+    fi
+    find "$BACKUP_DIR" -maxdepth 1 -type f -printf '%TY-%Tm-%Td %TH:%TM:%TS  %f\n' 2>/dev/null |
+        sort -r || true
+}
+
+cmd_config_restore() {
+    local name="" path arg
+    FORCE=0
+    for arg in "$@"; do
+        case "$arg" in
+            --force) FORCE=1 ;;
+            *)
+                if [ -z "$name" ]; then
+                    name="$arg"
+                else
+                    die "usage: jmx-setup config restore [name|latest] [--force]"
+                fi
+                ;;
+        esac
+    done
+    name="${name:-latest}"
+    require_root
+    require_no_active_session
+    [ -d "$BACKUP_DIR" ] || die "no backup directory at $BACKUP_DIR"
+    case "$name" in
+        */*) die "backup name must not contain '/'" ;;
+        latest)
+            path="$(find "$BACKUP_DIR" -maxdepth 1 -type f -name 'jmxd.conf.*' -printf '%T@ %p\n' 2>/dev/null |
+                sort -rn | head -n1 | cut -d' ' -f2-)"
+            ;;
+        *)
+            path="$BACKUP_DIR/$name"
+            ;;
+    esac
+    [ -n "$path" ] && [ -f "$path" ] || die "backup not found: $name"
+    backup_file "$CONFIG_FILE"
+    cp -a "$path" "$CONFIG_FILE"
+    chmod 0644 "$CONFIG_FILE"
+    chown root:root "$CONFIG_FILE"
+    log "Restored $CONFIG_FILE from $path"
+    cmd_config_sync_defaults
+}
+
+cmd_config() {
+    local sub="${1:-show}"
+    shift || true
+    case "$sub" in
+        show) cmd_config_show ;;
+        get) cmd_config_get "$@" ;;
+        set) cmd_config_set "$@" ;;
+        unset) cmd_config_unset "$@" ;;
+        validate) cmd_config_validate ;;
+        test) cmd_config_test ;;
+        reset) cmd_config_reset "$@" ;;
+        sync-defaults) cmd_config_sync_defaults ;;
+        backups) cmd_config_backups ;;
+        restore) cmd_config_restore "$@" ;;
+        path) printf '%s\n' "$CONFIG_FILE" ;;
+        -h|--help|help) usage ;;
+        *) die "unknown config command: $sub" ;;
+    esac
+}
+
+cmd_run() {
+    local arg
+    FORCE=0
+    for arg in "$@"; do
+        [ "$arg" = "--force" ] && FORCE=1
+    done
+    require_root
+    require_no_active_session
+    install -d -m 0755 "$STATE_DIR"
+    touch "$PENDING_FILE"
+    chmod 0644 "$PENDING_FILE"
+    if [ "$FORCE" = "1" ]; then
+        export JMX_ALLOW_ACTIVE_SESSION=1
+        export JMX_SETUP_FORCE=1
+    fi
+    exec "$LIB_DIR/run-provision.sh"
+}
+
+cmd_update() {
+    local arg
+    FORCE=0
+    for arg in "$@"; do
+        [ "$arg" = "--force" ] && FORCE=1
+    done
+    require_root
+    require_no_active_session
+
+    export DEBIAN_FRONTEND=noninteractive
+    export NEEDRESTART_SUSPEND=1
+    if [ "$FORCE" = "1" ]; then
+        export JMX_ALLOW_ACTIVE_SESSION=1
+        export JMX_SETUP_FORCE=1
+    fi
+
+    log "Running apt-get update..."
+    apt-get update -qq
+    log "Upgrading jmxremote and jmxsetup..."
+    apt-get install -y \
+        -o Dpkg::Options::=--force-confdef \
+        -o Dpkg::Options::=--force-confold \
+        --only-upgrade jmxremote jmxsetup
+
+    log "Applying any pending provisioning..."
+    "$LIB_DIR/run-provision.sh"
+}
+
+cmd_hold() {
+    require_root
+    install -d -m 0755 "$(dirname "$HOLD_FILE")"
+    touch "$HOLD_FILE"
+    chmod 0644 "$HOLD_FILE"
+    log "Automatic JMX updates and provisioning are held ($HOLD_FILE)."
+    log "Remove with: sudo jmx-setup unhold"
+}
+
+cmd_unhold() {
+    require_root
+    rm -f "$HOLD_FILE"
+    log "Automatic JMX updates and provisioning are no longer held."
+}
+
+cmd_auto_update() {
+    local action="${1:-status}"
+    case "$action" in
+        status)
+            if command -v systemctl >/dev/null 2>&1; then
+                log "Update timer: $(systemctl is-enabled jmx-update.timer 2>/dev/null || echo unknown)/$(systemctl is-active jmx-update.timer 2>/dev/null || echo unknown)"
+                systemctl list-timers jmx-update.timer --no-pager 2>/dev/null | sed -n '1,2p' || true
+            else
+                die "systemctl not available"
+            fi
+            ;;
+        enable)
+            require_root
+            systemctl enable --now jmx-update.timer
+            log "Daily JMX update timer enabled (17:05, skipped during an exam)."
+            ;;
+        disable)
+            require_root
+            systemctl disable --now jmx-update.timer
+            log "Daily JMX update timer disabled."
+            ;;
+        *) die "usage: jmx-setup auto-update status|enable|disable" ;;
+    esac
+}
+
+main() {
+    local command="${1:-}"
+    if [ "$#" -gt 0 ]; then
+        shift
+    fi
+    case "$command" in
+        status) cmd_status ;;
+        config) cmd_config "$@" ;;
+        run) cmd_run "$@" ;;
+        update) cmd_update "$@" ;;
+        hold) cmd_hold ;;
+        unhold) cmd_unhold ;;
+        auto-update) cmd_auto_update "$@" ;;
+        -h|--help|help|"") usage ;;
+        *) die "unknown command: $command (try: jmx-setup --help)" ;;
+    esac
+}
+
+main "$@"

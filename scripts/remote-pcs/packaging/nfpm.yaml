@@ -1,0 +1,85 @@
+name: "jmxsetup"
+arch: "amd64"
+platform: "linux"
+version: "${VERSION}"
+section: "admin"
+priority: "optional"
+maintainer: "Sayeedur Rahman (yetanothernaveed)"
+description: "JMX kiosk provisioning, update timer, and jmxd configuration CLI"
+vendor: "yetanothernaveed"
+homepage: "https://github.com/yetanothernaveed/JMX-APT"
+license: "MIT"
+
+depends:
+  - adduser
+  - apt
+  - bash
+  - ca-certificates
+  - coreutils
+  - curl
+  - debianutils
+  - dpkg
+  - findutils
+  - gawk
+  - gnupg
+  - grep
+  - passwd
+  - psmisc
+  - sed
+  - systemd
+  - util-linux
+
+contents:
+  - src: ./scripts/remote-pcs/packaging/bin/jmx-setup
+    dst: /usr/bin/jmx-setup
+    file_info:
+      mode: 0755
+  - src: ./scripts/remote-pcs/packaging/lib/run-provision.sh
+    dst: /usr/lib/jmx-setup/run-provision.sh
+    file_info:
+      mode: 0755
+  - src: ./scripts/remote-pcs/setup_script.sh
+    dst: /usr/lib/jmx-setup/setup_script.sh
+    file_info:
+      mode: 0755
+  - src: ./scripts/remote-pcs/rc.xml
+    dst: /usr/lib/jmx-setup/rc.xml
+    file_info:
+      mode: 0644
+  - src: ./scripts/remote-pcs/branding/branding.sh
+    dst: /usr/lib/jmx-setup/branding/branding.sh
+    file_info:
+      mode: 0644
+  - src: ./scripts/remote-pcs/branding/AustereWall.png
+    dst: /usr/lib/jmx-setup/branding/AustereWall.png
+    file_info:
+      mode: 0644
+  - src: ./scripts/remote-pcs/branding/Banner.png
+    dst: /usr/lib/jmx-setup/branding/Banner.png
+    file_info:
+      mode: 0644
+  - src: ./scripts/remote-pcs/branding/Wall.png
+    dst: /usr/lib/jmx-setup/branding/Wall.png
+    file_info:
+      mode: 0644
+  - src: ./scripts/remote-pcs/packaging/jmx-setup.default
+    dst: /etc/default/jmx-setup
+    type: config
+    file_info:
+      mode: 0644
+  - src: ./scripts/remote-pcs/packaging/systemd/jmx-provision.service
+    dst: /lib/systemd/system/jmx-provision.service
+    file_info:
+      mode: 0644
+  - src: ./scripts/remote-pcs/packaging/systemd/jmx-update.service
+    dst: /lib/systemd/system/jmx-update.service
+    file_info:
+      mode: 0644
+  - src: ./scripts/remote-pcs/packaging/systemd/jmx-update.timer
+    dst: /lib/systemd/system/jmx-update.timer
+    file_info:
+      mode: 0644
+
+scripts:
+  postinstall: ./scripts/remote-pcs/packaging/deb/postinstall.sh
+  preremove: ./scripts/remote-pcs/packaging/deb/preremove.sh

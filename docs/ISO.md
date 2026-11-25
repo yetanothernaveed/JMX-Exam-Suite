@@ -7,6 +7,20 @@ ISO adds to the live system are:
 - `/etc/systemd/system/jmx-setup.service` — first-boot provisioning unit, and
   its enablement symlink
 
+The first-boot unit installs and configures the kiosk. The `jmxsetup` APT
+package then takes over future provisioning and updates. On an installed
+machine, migrate once:
+
+```bash
+sudo apt update
+sudo apt install jmxsetup
+```
+
+The package archives the legacy `/etc/systemd/system/jmx-setup.service` and
+`jmxremote-update.*` units, enables the daily 17:05 update timer, and applies
+the packaged provisioning assets when they differ from what is already
+installed. `/opt/jmx-setup` is left untouched for reference and recovery.
+
 ## Why the live session must not run the setup unit
 
 The live image boots with `boot=casper`. `jmx-setup.service` installs packages,

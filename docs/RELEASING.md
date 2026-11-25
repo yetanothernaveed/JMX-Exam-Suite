@@ -9,11 +9,17 @@ A single tag push does everything:
 ```text
 jmxremote-<codename>-v<version>
   -> build jmx, jmxd, jmxcleanerd
-  -> package .deb / .rpm / .tar.gz
+  -> package jmxremote .deb / .rpm / .tar.gz
+  -> package jmxsetup .deb (provisioning assets + jmx-setup CLI)
   -> private GitHub Release
   -> signed APT repository pushed to JMX-APT/gh-pages
   -> mirrored public GitHub Release
 ```
+
+`jmxremote` contains the exam client and daemon. `jmxsetup` contains the kiosk
+provisioning script, branding assets, the daily update units, and the
+`jmx-setup` administration CLI. Both packages are built from the same tag and
+published together.
 
 The source repository stays private. `JMX-APT` contains only generated
 artifacts and is safe to keep public.
@@ -113,9 +119,13 @@ The workflow `.github/workflows/release-remote.yml` runs automatically.
 
 It publishes:
 
-- private release assets in the source repository
+- private release assets in the source repository (`jmxremote` and
+  `jmxsetup`)
 - `dists/stable/...` and `pool/...` in `JMX-APT/gh-pages`
 - a public release tagged `v<version>` in `JMX-APT`
+
+The publish script refuses to update the repository unless both
+`Package: jmxremote` and `Package: jmxsetup` are present in `Packages`.
 
 The package version is the numeric part of the tag (`26.11.4`). The codename
 is not part of the Debian version.
@@ -148,16 +158,30 @@ echo "deb [signed-by=/etc/apt/keyrings/jmx.gpg] $APT_URL stable main" |
   sudo tee /etc/apt/sources.list.d/jmx.list
 
 sudo apt update
-sudo apt install jmxremote
+sudo apt install jmxremote jmxsetup
 
-apt-cache policy jmxremote
+apt-cache policy jmxremote jmxsetup
 systemctl status jmxd
-systemctl list-timers jmxcleanerd.timer
+systemctl list-timers jmxcleanerd.timer jmx-update.timer
 jmx hello
 ```
 
 Test the commands that write to the workspace (`jmx get`, `jmx submit`, etc.)
 so the `jmxd.service` sandbox paths are exercised.
+
+Verify the setup package and its CLI:
+
+```bash
+sudo jmx-setup status
+sudo jmx-setup config show
+sudo jmx-setup config validate
+sudo jmx-setup auto-update status
+```
+
+`jmx-setup config set` changes `server_address`, `server_port`, or
+`session_duration_in_hours` without restarting `jmxd`. A restart is avoided on
+purpose: `jmxd.service` uses `RuntimeDirectory=jmx`, so restarting the daemon
+would remove `/run/jmx`, including the active session marker.
 
 ## Updating clients
 
@@ -170,21 +194,58 @@ Or only JMX:
 
 ```bash
 sudo apt update
-sudo apt install --only-upgrade jmxremote
+sudo apt install --only-upgrade jmxremote jmxsetup
 ```
 
-Do not run unattended upgrades during an active exam. Optional gated timer
-units live in `scripts/apt/systemd/`. On an existing machine:
+Do not run unattended upgrades during an active exam. The `jmxsetup` package
+installs `jmx-update.timer`, which runs once per day at 17:05 and skips both
+the update and provisioning while
+`/run/jmx/sessions/current_session.txt` exists, while
+`/etc/jmx/jmx-setup-hold` exists, or on a live ISO.
 
 ```bash
-sudo install -m 0644 scripts/apt/systemd/jmxremote-update.service /etc/systemd/system/
-sudo install -m 0644 scripts/apt/systemd/jmxremote-update.timer   /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now jmxremote-update.timer
+sudo jmx-setup auto-update status
+sudo jmx-setup auto-update disable
+sudo jmx-setup auto-update enable
+sudo jmx-setup hold
+sudo jmx-setup unhold
 ```
 
-The timer refuses to run while
-`/run/jmx/sessions/current_session.txt` exists.
+The first `jmxsetup` install also disables and archives the legacy
+`jmx-setup.service` and `jmxremote-update.*` units so only one update path
+remains active.
+
+### Provisioning on an existing machine
+
+Package installation marks the packaged assets as pending and starts
+`jmx-provision.service`. The wrapper compares a checksum of
+`setup_script.sh`, `branding/**`, and `rc.xml`; an upgrade that does not
+change those assets is a no-op.
+
+```bash
+sudo jmx-setup status
+sudo jmx-setup run          # apply now, respecting the exam-session guard
+sudo jmx-setup run --force  # ignore the exam-session guard
+```
+
+`jmx-setup config set` edits `/etc/jmxd/jmxd.conf` atomically, keeps a
+timestamped backup in `/etc/jmxd/backups`, and mirrors the value into
+`/etc/default/jmx-setup` so a forced re-provision does not undo it.
+
+```bash
+sudo jmx-setup config show
+sudo jmx-setup config set server_address 10.0.0.10
+sudo jmx-setup config set server_port 8080
+sudo jmx-setup config set session_duration_in_hours 2
+sudo jmx-setup config test
+sudo jmx-setup config backups
+sudo jmx-setup config restore latest
+```
+
+Only `server_address`, `server_port`, and `session_duration_in_hours` are
+writable in phase 1. `socket_directory` and `workspace_directory` are
+provisioning-managed because the socket path is compiled into `jmx`/`jmxd`
+and the workspace path is shared with `jmxcleanerd` and the firejail launcher.
 
 ### Setup script options
 
@@ -197,13 +258,22 @@ The timer refuses to run while
 | `JMX_SERVER_PORT` | `8080` | `server_port` in `/etc/jmxd/jmxd.conf` |
 | `JMX_SESSION_DURATION_HOURS` | `2` | Session duration |
 | `JMX_FORCE_CONFIG` | `0` | Set to `1` to rewrite an existing `/etc/jmxd/jmxd.conf` (backup kept) |
-| `JMX_AUTO_UPDATE` | `0` | Set to `1` to install the gated update timer |
+| `JMX_PRUNE_SESSIONS` | `1` | Remove non-exam desktop sessions from `/usr/share/xsessions` |
+| `JMX_SETUP_FORCE` | `0` | Set to `1` to bypass the pending/asset checksum in the wrapper |
+| `JMX_ALLOW_ACTIVE_SESSION` | `0` | Set to `1` to allow provisioning during an exam |
 
-Run it from its own directory because the branding files are relative:
+The script resolves branding and `rc.xml` relative to its own directory, so it
+can be run from any working directory:
 
 ```bash
-cd scripts/remote-pcs
-JMX_SERVER_ADDRESS=10.0.0.10 JMX_SERVER_PORT=8080 ./setup_script.sh
+JMX_SERVER_ADDRESS=10.0.0.10 JMX_SERVER_PORT=8080 ./scripts/remote-pcs/setup_script.sh
+```
+
+Prefer the package and CLI on installed machines:
+
+```bash
+sudo jmx-setup config set server_address 10.0.0.10
+sudo jmx-setup run
 ```
 
 ## Rollback
@@ -211,15 +281,23 @@ JMX_SERVER_ADDRESS=10.0.0.10 JMX_SERVER_PORT=8080 ./setup_script.sh
 Old `.deb` files stay in the repository pool:
 
 ```bash
-sudo apt install jmxremote=<previous-version> --allow-downgrades
+sudo apt install jmxremote=<previous-version> jmxsetup=<previous-version> --allow-downgrades
 ```
+
+A downgrade restores the packaged files, but it does not automatically undo OS
+changes that the provisioning script already applied. Use
+`jmx-setup config restore <name>` for daemon configuration rollback, or
+re-provision a specific version with `JMX_FORCE_CONFIG=1`.
 
 To block updates during an exam:
 
 ```bash
-sudo apt-mark hold jmxremote
+sudo jmx-setup hold
+# or
+sudo apt-mark hold jmxremote jmxsetup
 # later
-sudo apt-mark unhold jmxremote
+sudo jmx-setup unhold
+sudo apt-mark unhold jmxremote jmxsetup
 ```
 
 ## Key rotation

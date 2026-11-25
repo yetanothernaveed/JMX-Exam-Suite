@@ -10,11 +10,13 @@
 
 
 namespace server {
-    DaemonSettings settings;
-    const char* IP = settings.server_address.c_str();
-    const int PORT = settings.server_port.empty() ? 8080 : std::stoi(settings.server_port);
-
+    // Load the settings on every connection instead of caching them in a
+    // process-global. jmxd is long-running, so a cached address/port would
+    // keep using the old values until the daemon restarted (and restarting
+    // jmxd removes /run/jmx, including the active session file).
     inline int connectToServer() {
+        DaemonSettings settings;
+
         int sock = socket(AF_INET, SOCK_STREAM, 0);
         if (sock < 0) {
             std::cerr << "Socket creation error" << std::endl;
@@ -23,9 +25,9 @@ namespace server {
 
         sockaddr_in server_address {};
         server_address.sin_family = AF_INET;
-        server_address.sin_port = htons(PORT);
+        server_address.sin_port = htons(settings.server_port.empty() ? 8080 : std::stoi(settings.server_port));
 
-        if (inet_pton(AF_INET, IP, &server_address.sin_addr) <= 0) {
+        if (inet_pton(AF_INET, settings.server_address.c_str(), &server_address.sin_addr) <= 0) {
             std::cerr << "Invalid address/ Address not supported" << std::endl;
             close(sock);
             return -1;

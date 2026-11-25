@@ -1,0 +1,19 @@
+[Unit]
+Description=Apply pending JMX kiosk provisioning
+Documentation=https://github.com/yetanothernaveed/JMX-Exam-Suite
+After=network-online.target display-manager.service
+Wants=network-online.target
+ConditionPathExists=/var/lib/jmx-setup/pending
+ConditionPathExists=!/run/jmx/sessions/current_session.txt
+ConditionPathExists=!/etc/jmx/jmx-setup-hold
+ConditionKernelCommandLine=!boot=casper
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/jmx-setup
+Environment=DEBIAN_FRONTEND=noninteractive
+Environment=NEEDRESTART_SUSPEND=1
+ExecStart=/usr/lib/jmx-setup/run-provision.sh
+TimeoutStartSec=3600
+Nice=10
+IOSchedulingClass=idle
