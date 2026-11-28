@@ -14,7 +14,8 @@ public:
     void setup(CLI::App& app) override {
         sub_cmd_ = app.add_subcommand("submit", "Submit solution to server for evaluation");
         sub_cmd_->add_option("-q, --question-id", question_id, "Question identifier")->required();
-        sub_cmd_->add_option("-f, --filename", filename, "Filename of the solution to submit. E.g. A.java")->required();
+        sub_cmd_->add_option("-f, --filename", filename,
+                             "Solution path relative to the exam workspace. E.g. A.java or Q110/q110.py")->required();
     }
 
     bool is_called() const override {

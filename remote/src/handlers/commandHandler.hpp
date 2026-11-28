@@ -5,12 +5,15 @@
 #include "../lib/json.hpp"
 #include "../session/sessionManager.hpp"
 
+#include <algorithm>
 #include <array>
+#include <cctype>
 #include <cstdint>
 #include <string>
 #include <string_view>
 #include <unistd.h>
 #include <climits>
+#include <unordered_set>
 #include <vector>
 
 namespace command_handler {
@@ -29,10 +32,24 @@ namespace command_handler {
     }
 
     // Writes every question returned by the server into <workspace>/<qid>/.
-    // Text questions keep their previous behaviour; assets marked with
+    // A filename prefixed with "writable_" is written without the prefix and
+    // with kiosk write permission; every other file stays read-only.
+    // Text questions keep their original content; assets marked with
     // "encoding": "base64" are decoded and written as binary files.
-    inline bool writeQuestionFiles(const nlohmann::json& questions, std::string& error) {
-        const std::filesystem::path workspace(DaemonSettings().workspace_directory);
+    inline bool writeQuestionFiles(const nlohmann::json& questions,
+                                   const fs::path& workspace,
+                                   std::string& error,
+                                   uid_t privileged_uid = 0,
+                                   gid_t privileged_gid = 0) {
+        exam_workspace_handler::UniqueFd workspace_fd;
+        uid_t kiosk_uid{};
+        gid_t kiosk_gid{};
+        if (!exam_workspace_handler::open_workspace_directory(
+                workspace, workspace_fd, kiosk_uid, kiosk_gid, error)) {
+            return false;
+        }
+
+        std::unordered_set<std::string> destinations;
 
         for (const auto& question : questions) {
             const std::string qid = question.value("qid", std::string{});
@@ -50,39 +67,67 @@ namespace command_handler {
                 return false;
             }
 
-            std::string filename = question.value("filename", std::string{});
-            if (filename.empty()) {
-                filename = qid + extension;
+            std::string raw_filename = question.value("filename", std::string{});
+            if (raw_filename.empty()) {
+                raw_filename = qid + extension;
             }
-            if (!exam_workspace_handler::is_safe_path_component(filename) ||
-                std::filesystem::path(filename).filename() != filename) {
-                error = "Server returned an invalid filename for question '" + qid + "'";
+
+            std::string filename;
+            bool writable = false;
+            if (!exam_workspace_handler::resolve_question_filename(
+                    raw_filename, filename, writable, error)) {
+                error = "Server returned an invalid filename for question '" + qid +
+                        "': " + error;
+                return false;
+            }
+
+            std::string final_extension = fs::path(filename).extension().string();
+            std::transform(final_extension.begin(), final_extension.end(),
+                           final_extension.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (final_extension != extension) {
+                error = "Server returned a filename whose extension does not match the payload for question '" +
+                        qid + "'";
+                return false;
+            }
+
+            const std::string destination = qid + "/" + filename;
+            if (!destinations.insert(destination).second) {
+                error = "Server returned duplicate question file '" + destination + "'";
                 return false;
             }
 
             const std::string encoding = question.value("encoding", std::string{"text"});
             // get_ref avoids a second copy of a potentially large base64 string.
             const std::string& content = question.at("content").get_ref<const std::string&>();
-            const std::filesystem::path directory = workspace / qid;
 
+            std::vector<std::uint8_t> bytes;
             if (encoding == "base64") {
-                std::vector<std::uint8_t> bytes;
                 std::string decode_error;
                 if (!jmx::base64::decode(content, bytes, decode_error, jmx::kMaxMessageSize)) {
                     error = "Failed to decode question asset '" + filename + "': " + decode_error;
                     return false;
                 }
-                if (!exam_workspace_handler::write_binary_file_to_directory(directory, filename, bytes)) {
-                    error = "Failed to write question asset '" + filename + "' to exam workspace";
-                    return false;
-                }
-            } else if (encoding == "text" || encoding == "utf-8") {
-                if (!exam_workspace_handler::write_file_to_directory(directory, filename, content)) {
-                    error = "Failed to write question '" + filename + "' to exam workspace";
-                    return false;
-                }
-            } else {
+            } else if (encoding != "text" && encoding != "utf-8") {
                 error = "Unsupported encoding '" + encoding + "' for question '" + qid + "'";
+                return false;
+            }
+
+            exam_workspace_handler::UniqueFd directory_fd;
+            if (!exam_workspace_handler::ensure_question_directory(
+                    workspace_fd.get(), qid, privileged_uid, privileged_gid,
+                    directory_fd, error)) {
+                return false;
+            }
+
+            const char* data = encoding == "base64"
+                ? reinterpret_cast<const char*>(bytes.data())
+                : content.data();
+            const std::size_t size = encoding == "base64" ? bytes.size() : content.size();
+
+            if (!exam_workspace_handler::write_question_file(
+                    directory_fd.get(), filename, data, size, writable,
+                    kiosk_uid, kiosk_gid, privileged_uid, privileged_gid, error)) {
                 return false;
             }
         }
@@ -185,7 +230,8 @@ namespace command_handler {
         
         try {
             std::string write_error;
-            if (!writeQuestionFiles(responseJson["payload"].value("questions", nlohmann::json::array()), write_error)) {
+            if (!writeQuestionFiles(responseJson["payload"].value("questions", nlohmann::json::array()),
+                              fs::path(DaemonSettings().workspace_directory), write_error)) {
                 return "ERROR: " + write_error;
             }
         } catch (const std::exception& e) {
@@ -304,7 +350,8 @@ namespace command_handler {
 
         try {
             std::string write_error;
-            if (!writeQuestionFiles(responseJson["payload"].value("questions", nlohmann::json::array()), write_error)) {
+            if (!writeQuestionFiles(responseJson["payload"].value("questions", nlohmann::json::array()),
+                              fs::path(DaemonSettings().workspace_directory), write_error)) {
                 return "ERROR: " + write_error;
             }
         } catch (const std::exception& e) {
@@ -487,6 +534,47 @@ namespace command_handler {
             return "ERROR: No active session to submit solution";
         }
 
+        std::string qid;
+        try {
+            qid = request.at("payload").at("qid").get<std::string>();
+        } catch (const std::exception&) {
+            return "ERROR: Missing question ID";
+        }
+        if (!exam_workspace_handler::is_safe_path_component(qid)) {
+            return "ERROR: Invalid question ID";
+        }
+
+        std::string requested_path;
+        try {
+            requested_path = request.at("payload").at("filename").get<std::string>();
+        } catch (const std::exception&) {
+            return "ERROR: Missing submission filename";
+        }
+
+        // Read the file from inside the exam workspace. Relative paths with
+        // '/' are allowed, but no path component may be a symlink or '..'.
+        exam_workspace_handler::UniqueFd workspace_fd;
+        uid_t workspace_uid{};
+        gid_t workspace_gid{};
+        std::string path_error;
+        if (!exam_workspace_handler::open_workspace_directory(
+                settings.workspace_directory, workspace_fd,
+                workspace_uid, workspace_gid, path_error)) {
+            return "ERROR: " + path_error;
+        }
+
+        exam_workspace_handler::UniqueFd file_fd;
+        std::string basename;
+        if (!exam_workspace_handler::open_workspace_relative(
+                workspace_fd.get(), requested_path, file_fd, basename, path_error)) {
+            return "ERROR: " + path_error;
+        }
+
+        std::string code;
+        if (!exam_workspace_handler::read_file_descriptor(file_fd.get(), code, path_error)) {
+            return "ERROR: " + path_error;
+        }
+
         char buffer[HOST_NAME_MAX + 1];
         std::string pc_id {};
 
@@ -496,24 +584,12 @@ namespace command_handler {
             return "Error: Could not retrieve hostname";
         }
 
-        // Read code from file
-        std::string filename = request["payload"]["filename"].get<std::string>();
-        std::filesystem::path file_path = std::filesystem::path(settings.workspace_directory) / filename;
-
-        if (!std::filesystem::exists(file_path) || !std::filesystem::is_regular_file(file_path)) {
-            return "Error: File does not exist in exam workspace: " + file_path.string();
-        }
-
-        std::ifstream file(file_path);
-        if (!file.is_open()) {
-            return "Error: Could not open file: " + file_path.string();
-        }
-
-        std::string code((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-        file.close();
-
         request["payload"]["student_id"] = sessionManager.get_student_id();
         request["payload"]["pc_id"] = pc_id;
+        // The server only uses the filename to pick the wrapper language and
+        // name the stored response. Sending the basename keeps workspace
+        // layout out of the submission payload.
+        request["payload"]["filename"] = basename;
         request["payload"]["code"] = code;
 
         int serverFd = server::connectToServer();

@@ -14,6 +14,11 @@ target_include_directories(jmx PRIVATE src)
 add_executable(jmxcleanerd src/jmxcleanerd.cpp)
 target_include_directories(jmxcleanerd PRIVATE src)
 
+enable_testing()
+add_executable(remote_tests tests/remote_tests.cpp)
+target_include_directories(remote_tests PRIVATE src)
+add_test(NAME remote_tests COMMAND remote_tests)
+
 # Build against the oldest supported Ubuntu release (see release workflow).
 # Static-linking the C++ runtime keeps the package usable across distro
 # versions without pinning libstdc++ versions in the Debian metadata.

@@ -166,6 +166,28 @@ profile:
   other network-layer restrictions, so you don't need to poke any
   holes in those for this to work.
 
+## Question file permissions
+
+Question files are written by `jmxd` into `<workspace>/<qid>/`. By default they
+are `root:root 0444`, so `examkiosk` can read them but cannot modify them.
+
+An author can make an individual delivered file writable by prefixing its name
+on the server with `writable_`. The daemon strips the prefix before writing:
+
+```text
+writable_q110.py  ->  <workspace>/Q110/q110.py   kiosk-owned, 0644
+Q110.md           ->  <workspace>/Q110/Q110.md    root-owned, 0444
+```
+
+The question directory itself stays root-owned `0755`, so students can edit
+allowed files but cannot add, delete, or rename question files. See
+[`docs/writable_question_files.md`](../docs/writable_question_files.md) for the
+full author-facing rules.
+
+`jmx submit -f` accepts a path relative to the exam workspace, so nested files
+can be submitted with `jmx submit -q Q110 -f Q110/q110.py`. Absolute paths,
+`..`, and symlinked components are rejected.
+
 ## Extending beyond `hello`
 
 - Add new branches to `handleCommand()` in `src/daemon.cpp` — keep it

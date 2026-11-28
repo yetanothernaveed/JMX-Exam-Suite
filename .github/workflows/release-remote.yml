@@ -83,6 +83,12 @@ jobs:
           cmake -S . -B build -DCMAKE_INSTALL_PREFIX="$PWD/dist"
           cmake --build build --target install --parallel "$(nproc)"
 
+      # 1.1 Unit tests for question permissions and safe submit paths.
+      - name: Test remote daemon helpers
+        run: |
+          cmake --build build --target remote_tests --parallel "$(nproc)"
+          ctest --test-dir build --output-on-failure
+
       # 2. Package into tarball
       - name: Create Tarball Package
         run: |
